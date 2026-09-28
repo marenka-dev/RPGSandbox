@@ -178,3 +178,26 @@ Po návratu po několika herních letech může hráč zjistit, že:
 - starý konflikt vedl k válce nebo míru.
 
 To je jeden z klíčových principů hry.
+
+
+## Objektivní svět a poznání postav
+
+Simulace musí oddělovat to, **co ve světě skutečně existuje**, od toho, **co o tom jednotlivé postavy vědí**.
+
+Technologicky pokročilá civilizace může existovat ve stejném světě jako izolovaná vesnice, jejíž obyvatelé o pokročilých technologiích nemají žádné informace.
+
+Stejný princip platí pro:
+
+- technologie,
+- geografii,
+- historii,
+- politiku,
+- náboženství,
+- magii,
+- jiné kultury,
+- bytosti a druhy,
+- existenci jiných planet.
+
+Postavy získávají znalosti prostřednictvím zkušeností, cestování, rozhovorů, knih, vzdělání a dalších informačních zdrojů.
+
+Podrobný návrh je veden v [Znalostním modelu světa](knowledge-model.md).
