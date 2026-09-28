@@ -201,3 +201,107 @@ Stejný princip platí pro:
 Postavy získávají znalosti prostřednictvím zkušeností, cestování, rozhovorů, knih, vzdělání a dalších informačních zdrojů.
 
 Podrobný návrh je veden v [Znalostním modelu světa](knowledge-model.md).
+
+
+## Počáteční generování frakcí a politiky
+
+Generování počátečního světa musí zahrnovat nejen geografii, populaci a ekonomiku, ale také **historii organizací, frakcí a institucí**, které formovaly současný stav světa.
+
+Engine by měl při generování vytvořit například:
+
+- vznik a vývoj hlavních států,
+- vznik městských samospráv,
+- významné šlechtické rody nebo dynastie,
+- cechy a obchodní organizace,
+- náboženské instituce,
+- armády a bezpečnostní struktury,
+- politická hnutí,
+- tajné a opoziční skupiny,
+- významná spojenectví a rivality,
+- zaniklé nebo rozdělené frakce.
+
+Každá významná frakce by měla mít vlastní historii:
+
+- datum a okolnosti vzniku,
+- zakladatele,
+- důležité předchozí vůdce,
+- významné konflikty,
+- změny ideologie,
+- rozdělení a slučování,
+- změny majetku a území,
+- historické vztahy s jinými frakcemi.
+
+### Generování institucí a funkcí
+
+Součástí počáteční simulace je také vytvoření politických a organizačních funkcí.
+
+Například město může mít:
+
+- výkonnou funkci,
+- radu,
+- správní role,
+- bezpečnostní funkce,
+- ekonomické funkce,
+- soudní role.
+
+Konkrétní názvy a pravidla obsazování funkcí vycházejí z:
+
+- období,
+- kultury,
+- typu vlády,
+- technologické úrovně,
+- historie dané společnosti.
+
+Engine poté vygeneruje nebo přiřadí konkrétní NPC jako aktuální držitele těchto funkcí.
+
+### Politická historie vytváří současný stav
+
+Aktuální politika nemá vzniknout náhodným rozdáním hodnot.
+
+Má být výsledkem předchozí historie.
+
+Příklad:
+
+```text
+rok 811 – vznik obchodního cechu
+rok 842 – cech financuje obranu města
+rok 846 – získává dvě místa v radě
+rok 883 – konflikt s rodem Varenů
+rok 891 – starosta podporovaný cechem vyhrává volby
+současnost – obchodní cech má vysoký politický vliv
+```
+
+Díky tomu má aktuální mocenská struktura vysvětlitelný původ.
+
+### Politická historie a NPC
+
+Počáteční generování světa ovlivňuje také charakteristiky NPC.
+
+Postava může zdědit nebo získat:
+
+- členství ve frakci,
+- politické vazby rodiny,
+- funkci nebo úřad,
+- loajalitu,
+- povinnosti,
+- nepřátele,
+- spojence,
+- veřejnou reputaci,
+- politické názory ovlivněné prostředím.
+
+Tím se historie světa přímo promítá do osobních příběhů postav.
+
+### Lazy generation i pro politiku
+
+Stejně jako u geografie není nutné detailně vygenerovat každou organizaci ve vzdáleném světě.
+
+Na začátku mohou existovat pouze:
+
+- hlavní mocnosti,
+- významné frakce,
+- základní vztahy,
+- klíčové historické události.
+
+Lokální rady, menší cechy, konkrétní funkce a drobné politické konflikty lze zkonkretizovat až tehdy, když se oblast stane relevantní.
+
+Jakmile jsou ale jednou vygenerovány, stávají se součástí kanonického světa.
