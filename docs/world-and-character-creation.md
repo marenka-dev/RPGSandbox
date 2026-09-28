@@ -468,3 +468,36 @@ Minulost hráčské postavy:
 - předchozí vztahy.
 
 PlayerOrigin následně generuje výchozí PlayerState a Knowledge.
+
+
+---
+
+## 12. Politické a frakční generování při vytvoření světa
+
+Počáteční generování světa musí vytvořit také politickou a institucionální vrstvu.
+
+Engine z WorldConfig a vygenerované historie odvodí například:
+
+- hlavní státy a mocnosti,
+- lokální samosprávy,
+- významné frakce a organizace,
+- formy vlády,
+- politické funkce,
+- pravidla obsazování funkcí,
+- aktuální držitele klíčových úřadů,
+- vztahy mezi frakcemi,
+- současné politické konflikty,
+- historické důvody aktuálního rozložení moci.
+
+Tato vrstva musí být propojena s generováním hráčské postavy.
+
+PlayerOrigin může být například ovlivněn tím, že:
+
+- rodina patří k určitému cechu,
+- rodič zastává veřejnou funkci,
+- rod je politicky významný,
+- rodina podporuje konkrétní hnutí,
+- postava vyrůstala v regionu s politickým konfliktem,
+- minulá válka nebo převrat ovlivnil její dětství.
+
+Hráč však nemusí znát celou objektivní politickou realitu. Jeho počáteční znalosti se opět odvozují pouze z původu, vzdělání a životních zkušeností.
