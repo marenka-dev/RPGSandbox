@@ -537,3 +537,143 @@ CharacterVisualProfile
 Tento model platí jak pro NPC, tak z velké části i pro hráčskou postavu.
 
 Rozdíl je především v tom, že hráč zná vlastní základní historii a schopnosti, zatímco ostatní postavy poznává postupně.
+
+
+---
+
+## 23. Frakce, politika a institucionální role
+
+Charakteristika postavy zahrnuje také její vztah k organizacím, frakcím a politickým strukturám.
+
+Možné vazby a vlastnosti:
+
+- členství ve frakcích,
+- formální funkce a úřady,
+- neformální vliv,
+- loajalita k jednotlivým skupinám,
+- osobní politické postoje,
+- vztah k autoritám,
+- ambice získat nebo udržet funkci,
+- povinnosti vyplývající z role,
+- střety zájmů,
+- společenský a politický dosah.
+
+### Členství není totéž jako podpora
+
+Postava může:
+
+- být členem frakce, kterou ve skutečnosti nemá ráda,
+- podporovat organizaci, jejímž členem není,
+- veřejně zastávat jiný názor než soukromě,
+- být loajální pouze kvůli povolání, rodině nebo ekonomické závislosti.
+
+Proto je vhodné oddělit:
+
+```text
+CharacterFactionMembership
+CharacterFactionSympathy
+CharacterLoyalty
+```
+
+### Funkce a úřady
+
+Postava může zastávat více rolí současně.
+
+Například:
+
+```text
+Johann Keller
+
+occupation: merchant
+
+factions:
+  - Merchant Guild
+  - Rabenfeld City Council
+
+offices:
+  - Council Member
+
+loyalty:
+  Merchant Guild: high
+  City Council: medium
+
+political_values:
+  free_trade: strong_support
+  higher_city_taxes: oppose
+
+ambitions:
+  - become Guildmaster
+  - increase merchant influence in city
+
+conflicts_of_interest:
+  - votes on regulations affecting his own guild
+```
+
+Funkce samotná je vedena odděleně v modelu organizací a politiky; Character pouze drží vazbu na konkrétní Office / OfficeHolder.
+
+### Soukromý názor vs. veřejné vystupování
+
+NPC nemusí vždy říkat to, co si skutečně myslí.
+
+Příklad:
+
+```text
+private_opinion:
+  tariff: strongly_oppose
+
+official_position:
+  tariff: support
+
+public_statement:
+  "Je to nezbytné opatření."
+```
+
+Důvodem může být:
+
+- loajalita k frakci,
+- politická funkce,
+- strach,
+- společenský tlak,
+- osobní prospěch,
+- snaha chránit tajemství.
+
+AI dialogy proto mají vycházet nejen z osobnosti, ale také z:
+
+- rolí postavy,
+- jejích povinností,
+- frakční příslušnosti,
+- osobních hodnot,
+- vztahu k hráči,
+- míry důvěry,
+- toho, co je ochotna veřejně přiznat.
+
+### Politické informace nemusí být hráči známé
+
+Stejně jako ostatní charakteristiky mohou být i politické vazby skryté.
+
+Hráč může vědět:
+
+> Johann je obchodník a městský radní.
+
+Ale nemusí vědět:
+
+> tajně podporuje opoziční hnutí.
+
+Taková informace může být odhalena až prostřednictvím dialogů, pozorování, dokumentů, pověstí nebo jiných zdrojů.
+
+Podrobný návrh organizací a politických funkcí je veden v [Frakcích, organizacích a politice](factions-and-politics.md).
+
+### Datové vazby
+
+Do modelu postavy proto patří minimálně vazby:
+
+```text
+CharacterFactionMembership
+CharacterFactionSympathy
+CharacterOffice
+CharacterPoliticalBelief
+CharacterLoyalty
+CharacterInfluence
+CharacterObligation
+CharacterConflictOfInterest
+```
