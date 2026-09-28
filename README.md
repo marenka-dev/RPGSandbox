@@ -17,6 +17,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [Znalostní model světa](docs/knowledge-model.md)
 - [Tvorba světa a hráčské postavy](docs/world-and-character-creation.md)
 - [Model postav a NPC](docs/character-model.md)
+- [Model lokací](docs/location-model.md)
 - [AI a dlouhodobá paměť](docs/ai-memory.md)
 - [Grafický styl a pixel art](docs/art-style.md)
 - [MVP](docs/mvp.md)
