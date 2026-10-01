@@ -40,3 +40,18 @@ Výsledek testu a použité modifikátory by měly být dohledatelné pro laděn
 - fyzický konflikt a jeho případná míra detailu;
 - vývoj dovedností a zkušenosti v čase;
 - kolik mechanických informací a hodů zobrazit hráči.
+
+
+## Schválený princip: mechaniky nesmějí narušovat atmosféru
+
+Silná atmosféra a přirozené vyprávění mají přednost před neustálým zobrazováním hodů a čísel. Ve výchozím režimu jsou testy **skryté**: hráč zadává záměry a dostává uvěřitelný příběhový výsledek, nikoli hlášení o hodu D20.
+
+- Engine interně vypočítá atributy, dovednosti, obtížnost, okolnosti i hod kostkou. AI získá závazný výsledek a relevantní důvody, aby je vyjádřila přirozeným popisem a dialogem.
+- Hází se jen tehdy, existuje-li významná nejistota nebo riziko. Rutinní a neproblematické úkony nevyžadují test.
+- Výsledek nemusí být jen úspěch/neúspěch: může změnit postoj druhé osoby, odhalit dílčí informaci, vytvořit komplikaci nebo otevřít další možnost. Vše musí odpovídat rozhodnutí enginu a skutečné situaci.
+- Ani velmi dobrý hod neporuší motivace, pravomoci ani zásadní přesvědčení jiné postavy; společenské dovednosti nejsou ovládání mysli.
+- Opakování identické akce bez změny kontextu nevede k neomezeným novým pokusům. Další test může vzniknout po nové taktice, informaci či relevantní změně podmínek.
+- Hráč ve výchozím UI vidí přirozené projevy výsledku a případné poznatelné následky, nikoli interní čísla či skryté vědomosti NPC.
+- Pro kontrolu a testování bude dostupný volitelný přehled mechanik / herní log (hod, bonusy, obtížnost, příčina výsledku), který se nezobrazuje automaticky během scény.
+
+Cíl: **hráč hraje příběh, kostky v pozadí zajišťují férová pravidla**. Stejný princip se uplatní pro hráče i NPC.
