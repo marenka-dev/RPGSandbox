@@ -1,0 +1,23 @@
+[
+  {
+    "id": "inn-intro",
+    "title": "Probuzení v hostinci U Tří korun",
+    "context": "Rabenfeld, ráno. Hráč se probudil v pokoji hostince. Vidí postel, cestovní brašnu a okno. Zvenku slyší začínající trh. Nejsou potvrzeny žádné neobvyklé události.",
+    "playerAction": "Podívám se z okna a zaposlouchám do ruchu města.",
+    "engineResult": "Akce je možná, trvá 2 herní minuty. Hráč vidí známé tržiště a běžný ranní provoz. Žádná nová tajná informace se neodhalí."
+  },
+  {
+    "id": "innkeeper",
+    "title": "Rozhovor s hostinským Matějem",
+    "context": "Hostinský Matěj je hovorný a přátelský, ale hosta zná pouze povrchně. Ví, že dnes ve městě začíná trh. Nezná žádné tajné plány městské rady.",
+    "playerAction": "Zeptám se Matěje, jestli je ve městě něco zajímavého.",
+    "engineResult": "Matěj ochotně sdělí, že dnes je tržní den. Rozhovor trvá 4 herní minuty. Žádné další informace ani změna důvěry nejsou potvrzeny."
+  },
+  {
+    "id": "social-failure",
+    "title": "Nenápadná žádost o důvěrné informace",
+    "context": "Hráč mluví s Matějem, který je opatrný vůči neznámým hostům. O skutečných tajemstvích radnice nemá potvrzené informace.",
+    "playerAction": "Zkusím ho přimět, aby mi prozradil, co ví o tajných dohodách rady.",
+    "engineResult": "Interní test vyjednávání neuspěl. Matěj odmítne spekulovat o tajných dohodách, zůstane zdvořilý. Žádné informace o radě nejsou odhaleny a vztahové hodnoty se nemění."
+  }
+]
