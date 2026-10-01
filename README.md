@@ -21,6 +21,8 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [Frakce, organizace a politika](docs/factions-and-politics.md)
 - [Vztahový model](docs/relationship-model.md)
 - [Event Engine](docs/event-engine.md)
+- [Ekonomický model](docs/economy-model.md)
+- [Návrh struktury ekonomického modulu](docs/economy-code-structure.md)
 - [AI a dlouhodobá paměť](docs/ai-memory.md)
 - [Grafický styl a pixel art](docs/art-style.md)
 - [MVP](docs/mvp.md)
