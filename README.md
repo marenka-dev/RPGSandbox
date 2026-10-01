@@ -31,6 +31,10 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [MVP](docs/mvp.md)
 - [Volné nápady](docs/ideas.md)
 
+## První prototyp
+
+- [Lokální AI: české dialogy a měření odezvy](prototype/local-ai/README.md)
+
 ## Stav projektu
 
 Projekt je v koncepční fázi. V této etapě sbíráme a zpřesňujeme principy hry, datový model a hranice prvního MVP před samotnou implementací.
