@@ -14,6 +14,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 
 - [Vize hry](docs/vision.md)
 - [Herní forma a uživatelské rozhraní](docs/gameplay-ui.md)
+- [Technická architektura – Local First](docs/technical-architecture.md)
 - [RPG mechaniky](docs/rpg-mechanics.md)
 - [Simulace světa](docs/world-simulation.md)
 - [Znalostní model světa](docs/knowledge-model.md)
