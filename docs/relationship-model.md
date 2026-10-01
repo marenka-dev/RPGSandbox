@@ -59,3 +59,19 @@ Příklad: Johann a Mira se stanou přáteli, aniž by věděli, že jsou členy
 - **Knowledge Model:** informace, omyly, zvěsti, zdroje a stupně jistoty.
 - **Event Engine:** vyhodnotí reakci při získání informace nebo při konkrétním činu; změnu uloží a umožní dohledat její příčinu.
 - **AI vypravěč:** dialog interpretuje podle toho, co dané NPC skutečně ví, a nemá přístup k utajeným údajům jako ke znalosti dané postavy.
+
+
+## Dynamické vztahové události
+
+Schválený princip: vztahy používají stejný univerzální Event Engine jako ostatní dění ve světě. Nepotřebujeme předem definovat dlouhé seznamy konkrétních hádek, laskavostí, společenských setkání nebo romantických gest.
+
+- Engine definuje obecné mechanismy: získání a šíření informací, individuální interpretaci situace, validaci a provádění změn vztahových dimenzí a zápis do paměti.
+- AI může podle skutečného kontextu navrhnout konkrétní situaci, dialog a možné důsledky; nemění však přímo kanonický stav ani vztahové hodnoty.
+- Tatáž událost může vyvolat odlišné reakce různých postav a nemusí vyvolat žádnou. Ostatní postavy nesmějí automaticky znát obsah události jen proto, že se týká jejich známých nebo frakcí.
+- Reakce závisí na znalostech a důvěře ve zdroj, osobnosti, hodnotách, loajalitě, zkušenostech, předchozích osobních vztazích a situaci.
+- Důsledek může nastat hned nebo až později po získání nové informace. Uloží se důvod a vazba na původní událost.
+- Vztahy se vyvíjejí i dlouhodobým a opakovaným běžným chováním. Opakované lichotky či drobné dary nemají mechanicky vést k maximální důvěře; význam a účinek určuje kontext a dosavadní historie.
+
+Příklad: hráč pomůže obchodníkovi splatit dluh. Obchodník může být vděčný, jeho rodina může pocítit úlevu, konkurent se může obávat posílení soupeře; někdo další nemusí o události vědět vůbec nic.
+
+Základní pravidlo: konkrétní společenské události mohou vznikat dynamicky, avšak jejich účinky musejí vycházet ze stabilních simulačních pravidel.
