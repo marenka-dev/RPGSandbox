@@ -110,3 +110,22 @@ Například:
 - location_art_id.
 
 Díky tomu lze grafiku znovu používat a verzovat bez změny identity postavy.
+
+
+## Aktualizace výtvarného směru a Visual Engine
+
+Na základě schválených ukázkových obrazovek preferujeme pro **velké scény a portréty detailní, atmosférický malovaný styl** s konzistentními postavami a prostředím. Dříve preferovaný pixel art zůstává možnou úspornou alternativou a inspirací pro malé grafické prvky; není nadále povinným stylem všech ilustrací. UI: tmavší elegantní historizující rámy a jemné zlaté akcenty, ale dobrá čitelnost textu má přednost před dekoracemi.
+
+**Visual Engine** odděluje požadavky na grafiku od AI a simulace. Pracuje s trvale přiřazenými assety podle ID světa, lokace, postavy či události:
+
+1. Ze strukturovaných kanonických dat získá stabilní vizuální popis a ověří existující odpovídající grafiku.
+2. Pokud obrázek existuje, načte jej bez generování.
+3. Nový obrázek vytvoří jen podle potřeby, například při prvním důležitém setkání či odkrytí nové významné lokace; při běžných akcích se znovu používá stejný podklad.
+4. Výsledek uloží a přiřadí ke kanonické entitě; pozdější varianty musí zachovat identitu i architektonické či geografické charakteristiky.
+5. Pokud generování není dostupné nebo není hotové, zobrazí vhodnou stávající ilustraci či připravený zástupný obrázek; hraní nesmí být blokováno.
+
+**Dvě cesty pro NPC:** významné postavy mají individuálně vytvořené a uložené portréty; méně významné postavy využívají předpřipravenou či modulárně skládanou knihovnu obličejů a oblečení. Proměny vzhledu (věk, výraz, šaty) musí zachovat rozpoznatelnost.
+
+**Města a lokace:** vytvořit trvalou vizuální identitu z geografie, kultury, historie, technologie a známých staveb. Pro opakované návštěvy používat uložená panoramata/interiéry; méně významné místnosti smějí používat kompatibilní obecné ilustrace. Nové obrazy pro významné události (např. katastrofa, slavnost) vytvářet výběrově, nikoliv při každém tahu.
+
+**Výkon a náklady:** připravit sadu počáteční lokace a důležitých postav při vzniku hry; ostatní generovat až při potřebě či s předstihem u pravděpodobných příštích míst. Cache assetů a knihovna variant mají minimalizovat čekání, volání generativních modelů i spotřebu úložiště. Konkrétní službu, licencování výstupů, formáty a výkon ověříme při technickém návrhu.
