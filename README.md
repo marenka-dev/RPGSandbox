@@ -13,6 +13,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 ## Dokumentace
 
 - [Vize hry](docs/vision.md)
+- [Herní forma a uživatelské rozhraní](docs/gameplay-ui.md)
 - [Simulace světa](docs/world-simulation.md)
 - [Znalostní model světa](docs/knowledge-model.md)
 - [Tvorba světa a hráčské postavy](docs/world-and-character-creation.md)
