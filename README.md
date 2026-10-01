@@ -20,6 +20,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [Model lokací](docs/location-model.md)
 - [Frakce, organizace a politika](docs/factions-and-politics.md)
 - [Vztahový model](docs/relationship-model.md)
+- [Event Engine](docs/event-engine.md)
 - [AI a dlouhodobá paměť](docs/ai-memory.md)
 - [Grafický styl a pixel art](docs/art-style.md)
 - [MVP](docs/mvp.md)
