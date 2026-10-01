@@ -1,0 +1,4 @@
+bin/
+obj/
+local-ai-report.json
+report-*.json
