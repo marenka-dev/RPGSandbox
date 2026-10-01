@@ -11,12 +11,21 @@ dotnet run -- --mock
 
 Tento režim jen ověří načtení tří scénářů, vytvoření výstupního reportu a běh programu. **Netestuje AI ani kvalitu češtiny.**
 
-Skutečný lokální test:
+Skutečný lokální test (Qwen3 má ve výchozím nastavení vypnuté přemýšlení pro srovnatelný benchmark):
 
 ```powershell
 ollama pull qwen2.5:7b
 dotnet run -- --model qwen2.5:7b --report report-qwen.json
 ```
+
+Pokud chceš záměrně testovat režim přemýšlení u modelu, který ho podporuje, přidej `--think`. Pro oba srovnávací běhy jej **nepoužívej**. Po aktualizaci repozitáře spusť oba testy znovu a ulož je do různých reportů:
+
+```powershell
+dotnet run -- --model qwen2.5:7b --report report-qwen25-v2.json
+dotnet run -- --model qwen3:8b --report report-qwen3-v2.json
+```
+
+Nově se vypíše také počet slov a správně načtené počty tokenů, pokud je Ollama poskytne.
 
 Pro jiný podporovaný model lze použít `--model nazev-modelu`, pro jinou lokální instanci `--url http://127.0.0.1:11434`. Pro vlastní sadu testů `--scenarios cesta-k-souboru.json`.
 
