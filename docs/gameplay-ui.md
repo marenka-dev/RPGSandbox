@@ -58,3 +58,26 @@ Hráč se probudí v pokoji hostince v Rabenfeldu. Zobrazí se trvale přiřazen
 Simulační jádro, UI a AI zůstávají oddělené. Předběžná volba Godotu se tím znovu otevírá: pro tento typ hry může být vhodnější desktopové UI než engine určený pro přímý pohyb po mapě. O konkrétní technologii rozhodneme až porovnáním vhodných řešení.
 
 První MVP: jedna detailní oblast, omezené množství lokací a důležitých NPC, ilustrace scén a portréty, volný text i doporučené akce, akční posun času, jednoduchý deník a napojení na skutečné simulační události.
+
+
+## Schválené uspořádání záložek a obrazovek
+
+Vizuální směr odpovídá schváleným ilustračním náhledům: temnější elegantní rozhraní, jemné dekorativní prvky, výrazná atmosférická malovaná ilustrace scény a čitelný narativní panel. Jde o směr, nikoli definitivní pixely a konkrétní rozměry.
+
+**Hlavní scéna** zůstává těžištěm hry. Většina akcí je dostupná přes kontextové nabídky nebo volný text; záložky slouží hlavně pro přehled a správu. Odkazy na známé osoby, frakce a místa v textu lze otevřít přímo bez nutnosti opustit scénu.
+
+- **Deník:** chronologické osobní události, zaznamenané rozhovory a objevy, kalendář schůzek, sliby, závazky, vlastní poznámky; později i objevená kronika světa.
+- **Mapa:** pouze známá či domněle známá geografie od lokací po regiony; orientace, známé cesty a plánování cestování. Informace mohou být zastaralé nebo nepřesné.
+- **Postavy:** přehled známých NPC, trvalé portréty, naposledy známá lokace, osobní profily, společná historie a informace, které hráč skutečně získal.
+- **Vztahy:** přehled známých osobních, rodinných, obchodních a dalších vazeb, včetně názorů a nejistoty informací. Samostatná sekce **Rodina a rodokmen** zobrazuje generace, manželství, partnerství, děti, příbuzenství, známé konflikty, rodinnou historii a vazby na dědictví.
+- **Frakce:** známé státy, rady, cechy, rody, organizace, jejich struktura, historie, známé vztahy a konflikty. Členové získají odpovídající možnosti rozhodování a správy.
+- **Inventář:** osobně držené vybavení, peníze, předměty a dokumenty, jejich vlastnosti a kontextové akce.
+- **Majetek:** nemovitosti, vlastnické podíly, finance, dluhy, podniky, zaměstnanci a smlouvy. Rozsah rozhraní se přizpůsobí reálnému vlastnictví a rolím hráče.
+
+Kliknutí na hráčův portrét otevře **charakterový list** s vlastními RPG vlastnostmi, dovednostmi, zkušenostmi a jejich vývojem. Přesná čísla skrytých vztahů NPC se standardně neodhalují.
+
+Rodinná příslušnost je kanonická vazba používaná na více místech, nikoli kopie dat: příbuzný má osobní profil v Postavách; rodinné vazby a rodokmen jsou ve Vztazích; rodový majetek v Majetku a politicky významný rod se může objevit také ve Frakcích. Zobrazení vždy respektuje znalostní model: utajené příbuzenství či nemanželský potomek se neobjeví dříve, než se o něm hráč dozví.
+
+## Atmosféra a dostupnost informací
+
+Nezahlcovat hlavní obrazovku tabulkami ani skrytými RPG hody. Stavový panel ukazuje jen rychle využitelné údaje, ostatní podrobnosti se otevírají na požádání. Grafika a text doplňují skutečný stav světa, nevytvářejí nové kanonické skutečnosti samy o sobě.
