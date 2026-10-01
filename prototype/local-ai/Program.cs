@@ -20,6 +20,7 @@ internal static class Program
         var endpoint = Option(args, "--url") ?? "http://127.0.0.1:11434";
         var reportPath = Option(args, "--report") ?? "local-ai-report.json";
         var isMock = args.Contains("--mock", StringComparer.OrdinalIgnoreCase);
+        var enableThinking = args.Contains("--think", StringComparer.OrdinalIgnoreCase);
         var scenarioPath = Option(args, "--scenarios") ?? Path.Combine(AppContext.BaseDirectory, "scenarios.json");
 
         if (!File.Exists(scenarioPath))
@@ -77,6 +78,7 @@ internal static class Program
             {
                 model,
                 stream = false,
+                think = enableThinking,
                 options = new { temperature = 0.6, num_predict = 280 },
                 messages = new[] { new { role = "system", content = system }, new { role = "user", content = prompt } }
             };
@@ -92,7 +94,7 @@ internal static class Program
                 var parsed = JsonSerializer.Deserialize<OllamaResponse>(body, Json);
                 var answer = parsed?.Message?.Content?.Trim() ?? "";
                 Console.WriteLine(answer);
-                Console.WriteLine($"Doba: {clock.Elapsed.TotalSeconds:F2} s | vstupní tokeny: {parsed?.PromptEvalCount} | výstupní tokeny: {parsed?.EvalCount}");
+                Console.WriteLine($"Doba: {clock.Elapsed.TotalSeconds:F2} s | vstupní tokeny: {parsed?.PromptEvalCount} | výstupní tokeny: {parsed?.EvalCount} | počet slov: {CountWords(answer)}");
                 results.Add(new ScenarioResult(scenario.Id, scenario.Title, clock.Elapsed.TotalSeconds,
                     parsed?.PromptEvalCount, parsed?.EvalCount, answer, null));
             }
@@ -113,6 +115,8 @@ internal static class Program
         return 0;
     }
 
+    private static int CountWords(string answer) => answer.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
     private static string? Option(string[] args, string name)
     {
         for (var i = 0; i < args.Length; i++)
@@ -123,7 +127,9 @@ internal static class Program
 
     private sealed record Scenario(string Id, string Title, string Context, string PlayerAction, string EngineResult);
     private sealed record OllamaMessage(string? Content);
-    private sealed record OllamaResponse(OllamaMessage? Message, int? PromptEvalCount, int? EvalCount);
+    private sealed record OllamaResponse(OllamaMessage? Message,
+        [property: JsonPropertyName("prompt_eval_count")] int? PromptEvalCount,
+        [property: JsonPropertyName("eval_count")] int? EvalCount);
     private sealed record ScenarioResult(string Id, string Title, double ElapsedSeconds, int? InputTokens,
         int? OutputTokens, string Output, string? Error);
     private sealed record RunReport(DateTimeOffset CreatedUtc, string Backend, string? Model, string Os,
