@@ -45,3 +45,16 @@ Distribuce modelů musí zohledňovat jejich licence, velikost a kompatibilitu s
 Rizika: náročnost lokálního obrazového generování, delší odezvy slabších počítačů, různá kvalita češtiny a konzistence mezi lokálními modely, distribuční licence a velikost instalace.
 
 **Prototypovací test:** na běžném herním PC odehrát souvislou českou scénu v hostinci s několika NPC a jejich vzpomínkami; měřit kvalitu vyprávění, konzistenci, dobu odezvy, spotřebu RAM/VRAM a chování při chybějícím obrázku. Podle výsledků vybrat konkrétní modely, UI framework a doporučené HW profily.
+
+
+## Scene Contract mezi enginem a AI
+
+Pro narativní výstup používáme princip **engine vytvoří scénu, AI ji odvypráví**. AI není autor kanonických skutečností.
+
+Před každým narativním výstupem engine sestaví Scene Contract obsahující:
+- kanonická fakta a ověřený výsledek akce;
+- znalosti, které smějí být v dané scéně použity;
+- povolenou nekánonickou smyslovou dekoraci;
+- explicitně zakázané domyšlené skutečnosti, pokud jsou pro scénu rizikové.
+
+AI funguje jako stylistický renderer: vytváří přirozenou češtinu, dialog a atmosféru, ale nesmí přidávat osoby, události, motivace, předměty, pověsti, ekonomické důvody ani jiné skutečnosti, které engine neposkytl. Pokud detail není definován, je bezpečnější ho vynechat než doplnit. Tento princip snižuje halucinace a umožňuje použít menší rychlejší lokální model.
