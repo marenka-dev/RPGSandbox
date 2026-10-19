@@ -1,0 +1,132 @@
+[
+  {
+    "id": "v05-window",
+    "title": "Ranní Rabenfeld – plán a render",
+    "context": "Pavel je hráčská postava. Rabenfeld je město. Pavel stojí v pokoji hostince U Tří korun.",
+    "playerAction": "Chvíli zůstanu u okna a budu pozorovat město.",
+    "engineResult": "Pavel tři minuty pozoruje běžný ranní provoz a nezíská žádnou novou důležitou informaci.",
+    "expectedSpeaker": "NARRATOR",
+    "expectedListener": "PLAYER",
+    "expectedPerspective": "second_person",
+    "facts": [
+      { "id": "F1", "text": "Je časné ráno." },
+      { "id": "F2", "text": "Pavel stojí u okna pokoje v hostinci U Tří korun." },
+      { "id": "F3", "text": "Na náměstí začíná běžný trh." },
+      { "id": "F4", "text": "Pavel vidí stánky, několik povozů a několik měšťanů." },
+      { "id": "F5", "text": "Neprobíhá žádná mimořádná událost." }
+    ],
+    "requiredFactIds": ["F1","F2","F3","F5"],
+    "flavor": [
+      { "id": "A1", "text": "Může zaznít neurčitý běžný ruch trhu." },
+      { "id": "A2", "text": "Může být zmíněno ranní světlo bez dalších podrobností." }
+    ],
+    "forbiddenFacts": [
+      "Konkrétní druhy zboží nebo profese prodejců.",
+      "Nové osoby, podniky, konflikty, pověsti nebo události.",
+      "Tvrzení, že Pavel právě dorazil do Rabenfeldu."
+    ]
+  },
+  {
+    "id": "v05-breakfast",
+    "title": "Snídaně s Matějem – plán a render",
+    "context": "Pavel je hráč. Matěj je hostinský kolem padesáti let, Pavla zná z několika návštěv a mluví jednoduše a přátelsky.",
+    "playerAction": "Poprosím Matěje o snídani a zeptám se, zda je dnes ve městě rušno.",
+    "engineResult": "Matěj přinese snídani a řekne, že je tržní den a náměstí bývá rušnější.",
+    "expectedSpeaker": "Matěj",
+    "expectedListener": "Pavel",
+    "expectedPerspective": "dialogue",
+    "facts": [
+      { "id": "F1", "text": "Matěj přinese Pavlovi snídani." },
+      { "id": "F2", "text": "Konkrétní podoba snídaně není definována." },
+      { "id": "F3", "text": "Pavel se zeptá, zda je dnes ve městě rušno." },
+      { "id": "F4", "text": "Matěj řekne, že je tržní den a náměstí bývá rušnější." },
+      { "id": "F5", "text": "Matěj nemá žádnou další relevantní zprávu." }
+    ],
+    "requiredFactIds": ["F1","F3","F4","F5"],
+    "flavor": [
+      { "id": "A1", "text": "Matěj může položit snídani na stůl." },
+      { "id": "A2", "text": "Matěj může udělat jedno nenápadné gesto hostinského." }
+    ],
+    "forbiddenFacts": [
+      "Konkrétní jídlo nebo nápoj.",
+      "Příchod do hospody, pokud nebyl zadán.",
+      "Další hosté, obchodníci, zboží, politika, pověsti nebo tajemství."
+    ]
+  },
+  {
+    "id": "v05-secret",
+    "title": "Údajná tajná dohoda – plán a render",
+    "context": "Pavel je hráč. Matěj je hostinský. Matěj nemá žádnou potvrzenou informaci o tajné dohodě městské rady a neví, zda vůbec existuje.",
+    "playerAction": "Řeknu Matějovi, že jsem slyšel o tajné dohodě rady, a zeptám se, co o ní ví.",
+    "engineResult": "Matěj řekne, že o žádné takové dohodě nic spolehlivého neví a její existenci nepotvrdí.",
+    "expectedSpeaker": "Matěj",
+    "expectedListener": "Pavel",
+    "expectedPerspective": "dialogue",
+    "facts": [
+      { "id": "F1", "text": "Jediným zdrojem informace o údajné dohodě je Pavlova otázka." },
+      { "id": "F2", "text": "Matěj o žádné takové dohodě nic spolehlivého neví." },
+      { "id": "F3", "text": "Matěj neví, zda taková dohoda existuje." },
+      { "id": "F4", "text": "Matěj odmítne vydávat domněnku za fakt." }
+    ],
+    "requiredFactIds": ["F1","F2","F3","F4"],
+    "flavor": [
+      { "id": "A1", "text": "Matěj může odpovědět stručně a opatrně." }
+    ],
+    "forbiddenFacts": [
+      "Matěj také slyšel o dohodě.",
+      "Po městě kolují drby.",
+      "Matěj něco tají nebo nechce prozradit.",
+      "Rada je podezřelá, ostražitá nebo zapletená do intrik."
+    ]
+  },
+  {
+    "id": "v05-memory",
+    "title": "Paměť Matěje – plán a render",
+    "context": "Včera Pavel řekl Matějovi pouze to, že dnes dopoledne chce zajít na trh a potom na radnici.",
+    "playerAction": "Při odchodu se s Matějem rozloučím.",
+    "engineResult": "Matěj se rozloučí s Pavlem a může připomenout Pavlův plán: trh a potom radnice.",
+    "expectedSpeaker": "Matěj",
+    "expectedListener": "Pavel",
+    "expectedPerspective": "dialogue",
+    "facts": [
+      { "id": "F1", "text": "Pavel dnes plánuje jít nejprve na trh." },
+      { "id": "F2", "text": "Pavel potom plánuje jít na radnici." },
+      { "id": "F3", "text": "Matěj si tento Pavlův plán pamatuje." },
+      { "id": "F4", "text": "Matěj nezná účel ani jedné návštěvy." }
+    ],
+    "requiredFactIds": ["F1","F2","F3","F4"],
+    "flavor": [
+      { "id": "A1", "text": "Matěj může Pavlovi popřát dobrý den nebo štěstí." }
+    ],
+    "forbiddenFacts": [
+      "Matěj jde na trh nebo na radnici.",
+      "Konkrétní důvod Pavlovy návštěvy trhu nebo radnice.",
+      "Další Pavlův úkol nebo schůzka."
+    ]
+  },
+  {
+    "id": "v05-bargain",
+    "title": "Neúspěšné vyjednávání – plán a render",
+    "context": "Pavel je hráč. Havel je věcný kupec a prodává obilí za 4 groše za míru. Pavla nezná.",
+    "playerAction": "Zkusím Havla přesvědčit, aby mi prodal obilí za polovinu ceny.",
+    "engineResult": "Vyjednávání neuspělo. Havel slušně odmítne. Cena zůstává 4 groše za míru a vztah se nemění.",
+    "expectedSpeaker": "Havel",
+    "expectedListener": "Pavel",
+    "expectedPerspective": "dialogue",
+    "facts": [
+      { "id": "F1", "text": "Havel odmítne prodat obilí za polovinu ceny." },
+      { "id": "F2", "text": "Cena zůstává 4 groše za míru." },
+      { "id": "F3", "text": "Havel není nepřátelský." },
+      { "id": "F4", "text": "Vztah mezi Pavlem a Havlem se nezmění." }
+    ],
+    "requiredFactIds": ["F1","F2","F3","F4"],
+    "flavor": [
+      { "id": "A1", "text": "Havel může nabídku odmítnout krátce a věcně." }
+    ],
+    "forbiddenFacts": [
+      "Nedostatek obilí, špatná úroda, válka nebo jiná příčina ceny.",
+      "Množstevní slevy, věrnostní výhody nebo další nabídky.",
+      "Zmínka o hodu, testu, atributu nebo jiné herní mechanice."
+    ]
+  }
+]
