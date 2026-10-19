@@ -62,7 +62,7 @@ AI funguje jako stylistický renderer: vytváří přirozenou češtinu, dialog 
 
 ## Interpretace přirozeného vstupu
 
-Podrobněji: [Sémantické akce a dotazy nad světem](semantic-actions.md)
+Podrobněji: [Sémantické akce a dotazy nad světem](semantic-actions.md) a [Generování světa, World Graph a lazy concretization](world-graph-and-concretization.md)
 
 
 Schválený princip pro vstup hráče je **AI chápe jazyk, engine chápe svět**.
@@ -75,3 +75,10 @@ Vstup se zpracovává ve vrstvách:
 5. pouze engine provede změnu světa a sestaví Scene/Engine Contract pro narativní renderer.
 
 Sémantický interpreter nesmí vytvářet osoby, fakta, úspěch akce ani měnit databázi. Prototyp v0.3 nahrazuje rostoucí seznam pevných intentů obecným Action/Query DSL. Pracovní rozdělení rolí zůstává Qwen3 8B pro strukturovanou interpretaci a Gemma 3 12B pro český narativní render; nejde zatím o definitivní modely distribuce.
+
+
+## World Graph a concretization
+
+Prototyp v0.4 zavádí persistentní World Graph se samostatnou vrstvou znalostí hráče. Kanonický svět se při založení hry vytvoří v různém stupni rozlišení: makrostruktura a důležité entity existují před hráčem, zatímco dosud neurčený běžný detail lze později konkretizovat pouze podle již existujících omezení světa.
+
+Konkretizace není volná generace AI. Provádí ji engine podle pravidel a výsledek se okamžitě stává persistentním kanonickým faktem. Hráčova otázka tedy svět nevymýšlí; pouze může vyvolat potřebu rozbalit část světa, která byla dosud ponechána v nižším detailu.
