@@ -1,4 +1,4 @@
-# RPGSandbox: lokální AI prototyp 01
+# RPGSandbox: lokální AI prototyp 0.3 – český vypravěč
 
 Samostatná konzolová diagnostika českého vyprávění, rychlosti odpovědí a respektování kanonického stavu světa. Zatím **nejde o hru ani o skutečně dokončený simulační engine**. `engineResult` jsou předem připravené testovací výsledky, které budoucí engine předá AI. První běh vyžaduje .NET SDK 8 a pro skutečné AI odpovědi lokálně spuštěnou Ollamu s instalovaným kompatibilním modelem.
 
@@ -47,3 +47,27 @@ Opakovat scénáře s více lokálními modely na stejném PC. Výsledky automat
 2. Přidat streamované odpovědi až po oddělení validovaných účinků od narativního výstupu.
 3. Přidat sqlite perzistenci, paměť NPC a Visual Engine s lokální cache portrétů.
 4. Ověřit kvalitu textu a latenci dříve, než budeme generovat obrazy.
+
+
+## Benchmark 0.3 – doporučené modely
+
+Výchozí sada je nyní `scenarios-czech-v03.json` a obsahuje pět testů: atmosférický popis, přirozený dialog, znalostní hranici, paměť NPC a neúspěšné RPG vyjednávání.
+
+Pro současný test:
+
+```powershell
+ollama pull aya-expanse:8b
+ollama pull gemma3:12b
+
+dotnet run -- --model aya-expanse:8b --report report-aya-v03.json
+dotnet run -- --model gemma3:12b --report report-gemma3-v03.json
+```
+
+Pro referenci lze znovu spustit:
+
+```powershell
+dotnet run -- --model qwen2.5:7b --report report-qwen25-v03.json
+dotnet run -- --model qwen3:8b --report report-qwen3-v03.json
+```
+
+Výstupy hodnotit podle [CZECH-SCORECARD.md](CZECH-SCORECARD.md). Aya Expanse je vhodná pro experiment, ale před případnou distribucí či komerčním použitím je nutné samostatně ověřit licenci konkrétního modelu. Výběr modelu pro hru zatím není schválen.
