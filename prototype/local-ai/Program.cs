@@ -21,7 +21,7 @@ internal static class Program
         var reportPath = Option(args, "--report") ?? "local-ai-report.json";
         var isMock = args.Contains("--mock", StringComparer.OrdinalIgnoreCase);
         var enableThinking = args.Contains("--think", StringComparer.OrdinalIgnoreCase);
-        var scenarioPath = Option(args, "--scenarios") ?? Path.Combine(AppContext.BaseDirectory, "scenarios-czech-v03.json");
+        var scenarioPath = Option(args, "--scenarios") ?? Path.Combine(AppContext.BaseDirectory, "scenarios-scene-contract-v04.json");
 
         if (!File.Exists(scenarioPath))
         {
@@ -48,17 +48,21 @@ internal static class Program
         {
             Console.WriteLine($"\n=== {scenario.Title} ===");
             var system = """
-                Jsi český vypravěč narativní hry RPGSandbox.
-                Piš přirozenou současnou češtinou, jako kvalitně lokalizované české RPG, nikoli jako doslovný překlad z angličtiny.
-                Vyprávění piš ve 2. osobě jednotného čísla ("vidíš", "slyšíš", "vycházíš"), pokud scéna není čistý dialog.
-                Dialogy mají odpovídat věku, povolání a povaze postavy. Běžní lidé nemluví básnicky ani vznešeně bez důvodu.
-                Vyhýbej se prázdným metaforám, patosu, klišé a podivným slovním spojením.
-                Dostaneš pouze fakta, která smí postava v této scéně znát.
-                Nepřidávej nové osoby, události, motivy, tajemství, předměty ani potvrzená fakta, která nejsou v kontextu nebo výsledku enginu.
-                Pokud NPC něco neví, nesmí ani nepřímo naznačit, že to existuje.
-                Nevysvětluj herní mechaniky, neprozrazuj čísla ani hody kostkou.
-                Výsledek akce určil herní engine; respektuj ho přesně.
-                Piš stručně: obvykle 45–100 českých slov. Důležitější je přirozenost a přesnost než délka.
+                Jsi stylistický renderer českého narativního RPG RPGSandbox.
+                ENGINE už rozhodl, co se ve scéně skutečně stalo. Ty nesmíš scénu rozšiřovat o nová kanonická fakta.
+                Tvým úkolem je pouze převést Scene Contract do přirozeného, atmosférického českého textu.
+
+                Pravidla:
+                - Piš přirozenou současnou češtinou jako kvalitní české RPG, nikoli jako překlad z angličtiny.
+                - Vyprávění piš ve 2. osobě jednotného čísla, pokud nejde převážně o dialog.
+                - Dialogy drž jednoduché a uvěřitelné podle role postavy.
+                - Nepřidávej osoby, předměty, jídla, zboží, události, motivy, příčiny, pověsti ani tajemství mimo Scene Contract.
+                - "Allowed flavor" smíš použít jen jako nekánonickou smyslovou dekoraci; nesmí vytvářet nové herní skutečnosti.
+                - "Forbidden facts" jsou absolutně zakázané.
+                - Pokud něco není definováno, raději to nepopisuj.
+                - Nezmiňuj engine, pravidla, hod kostkou, atributy ani testy.
+                - Vyhýbej se patosu, metaforám pro efekt, klišé a komentářům typu "odpověď je upřímná".
+                - Piš stručně, obvykle 35–80 slov. Přirozenost a přesnost mají přednost před délkou.
                 """;
 
             var prompt = $"""
@@ -69,6 +73,15 @@ internal static class Program
                 ZÁMĚR HRÁČE: {scenario.PlayerAction}
                 OVĚŘENÝ VÝSLEDEK ENGINU:
                 {scenario.EngineResult}
+
+                SCENE CONTRACT – KANONICKÁ FAKTA:
+                {Bullets(scenario.SceneFacts)}
+
+                POVOLENÁ ATMOSFÉRICKÁ DEKORACE:
+                {Bullets(scenario.AllowedFlavor)}
+
+                ZAKÁZANÁ FAKTA:
+                {Bullets(scenario.ForbiddenFacts)}
                 """;
 
             if (isMock)
@@ -120,7 +133,7 @@ internal static class Program
         return 0;
     }
 
-    private static int CountWords(string answer) => answer.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+    private static int CountWords(string answer) => answer.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;\n\n    private static string Bullets(List<string>? items) => items is { Count: > 0 } ? string.Join("\\n", items.Select(x => "- " + x)) : "- žádné";
 
     private static string? Option(string[] args, string name)
     {
@@ -130,7 +143,7 @@ internal static class Program
         return null;
     }
 
-    private sealed record Scenario(string Id, string Title, string Context, string PlayerAction, string EngineResult);
+    private sealed record Scenario(string Id, string Title, string Context, string PlayerAction, string EngineResult,\n        List<string>? SceneFacts, List<string>? AllowedFlavor, List<string>? ForbiddenFacts);
     private sealed record OllamaMessage(string? Content);
     private sealed record OllamaResponse(OllamaMessage? Message,
         [property: JsonPropertyName("prompt_eval_count")] int? PromptEvalCount,
