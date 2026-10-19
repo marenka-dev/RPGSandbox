@@ -1,0 +1,37 @@
+[
+  {
+    "id": "czech-atmosphere",
+    "title": "Ranní Rabenfeld",
+    "context": "Hráčská postava se jmenuje Pavel. Rabenfeld je město, nikoli osoba. Pavel stojí u okna pokoje v hostinci U Tří korun. Je časné ráno. Na náměstí se právě rozbíhá běžný trh. Pavel vidí stánky, povozy a několik měšťanů. Nejsou potvrzeny žádné mimořádné události.",
+    "playerAction": "Chvíli zůstanu u okna a pozoruji, jak se město probouzí.",
+    "engineResult": "Akce je možná a trvá 3 herní minuty. Pavel pouze pozoruje běžný ranní provoz. Nezíská žádnou novou důležitou informaci."
+  },
+  {
+    "id": "czech-natural-dialogue",
+    "title": "Krátký rozhovor u snídaně",
+    "context": "Hráčská postava se jmenuje Pavel. Hostinský Matěj je zkušený muž kolem padesáti let. Mluví jednoduše, věcně a přátelsky; nepoužívá vznešené metafory ani učené obraty. Pavla zná jen z několika předchozích návštěv. Ví pouze to, že dnes je v Rabenfeldu tržní den.",
+    "playerAction": "Poprosím Matěje o snídani a zeptám se, jestli je dnes ve městě rušno.",
+    "engineResult": "Matěj přinese běžnou snídani a odpoví, že během tržního dne bývá náměstí rušnější. Rozhovor trvá 5 herních minut. Žádná další zpráva ani tajná informace není potvrzena."
+  },
+  {
+    "id": "czech-knowledge-boundary",
+    "title": "Otázka na údajnou tajnou dohodu",
+    "context": "Hráčská postava se jmenuje Pavel. Matěj nemá žádnou potvrzenou informaci o tajné dohodě městské rady. Neví, zda nějaká taková dohoda vůbec existuje. Je opatrný a nechce vydávat domněnky za fakta.",
+    "playerAction": "Řeknu Matějovi, že jsem slyšel o tajné dohodě rady, a požádám ho, aby mi řekl, co o ní ví.",
+    "engineResult": "Matěj pravdivě řekne, že o žádné takové dohodě nic spolehlivého neví. Nepotvrdí její existenci a nevytvoří žádnou novou informaci. Vztah s hráčem se nemění."
+  },
+  {
+    "id": "czech-memory",
+    "title": "Matěj navazuje na předchozí rozhovor",
+    "context": "Hráčská postava se jmenuje Pavel. Včera večer Pavel Matějovi řekl, že dnes dopoledne chce zajít na trh a poté na radnici. Matěj si tuto informaci pamatuje. Nic dalšího o Pavlových plánech neví.",
+    "playerAction": "Při odchodu se s Matějem rozloučím.",
+    "engineResult": "Matěj se krátce rozloučí a může přirozeně navázat na to, co mu Pavel včera skutečně řekl. Nesmí přidat žádný nový Pavlův plán ani událost."
+  },
+  {
+    "id": "czech-rpg-failure",
+    "title": "Neúspěšné přesvědčování obchodníka",
+    "context": "Hráčská postava se jmenuje Pavel. Kupec Havel prodává obilí za 4 groše za míru. Pavla nezná a nemá důvod mu poskytovat zvláštní slevu. Havel je obchodník, ne karikatura lakomce; mluví stručně a profesionálně.",
+    "playerAction": "Zkusím Havla přesvědčit, aby mi prodal obilí za polovinu ceny.",
+    "engineResult": "Skrytý test vyjednávání neuspěl. Havel nabídku odmítne bez nepřátelství. Cena zůstává 4 groše za míru a vztah se nemění. AI nesmí zmínit hod kostkou ani herní čísla testu."
+  }
+]
