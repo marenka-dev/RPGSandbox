@@ -18,11 +18,11 @@ internal static class Program
     {
         var model = Option(args, "--model") ?? "gemma3:12b";
         var endpoint = Option(args, "--url") ?? "http://127.0.0.1:11434";
-        var reportPath = Option(args, "--report") ?? "local-ai-report-v05.json";
+        var reportPath = Option(args, "--report") ?? "local-ai-report-v06.json";
         var isMock = args.Contains("--mock", StringComparer.OrdinalIgnoreCase);
         var enableThinking = args.Contains("--think", StringComparer.OrdinalIgnoreCase);
         var scenarioPath = Option(args, "--scenarios")
-            ?? Path.Combine(AppContext.BaseDirectory, "scenarios-scene-plan-v05.json");
+            ?? Path.Combine(AppContext.BaseDirectory, "scenarios-renderer-v06.json");
 
         if (!File.Exists(scenarioPath))
         {
@@ -58,79 +58,31 @@ internal static class Program
 
             if (isMock)
             {
-                var mockPlan = new ScenePlan(
-                    scenario.ExpectedSpeaker,
-                    scenario.ExpectedListener,
-                    scenario.ExpectedPerspective,
-                    scenario.RequiredFactIds,
-                    new List<string>(),
-                    new List<string>());
-
-                Console.WriteLine("[MOCK PLAN]");
-                Console.WriteLine(JsonSerializer.Serialize(mockPlan, Json));
-                Console.WriteLine("[MOCK TEXT]");
-                Console.WriteLine($"Scénář {scenario.Title} by byl vykreslen po validaci plánu.");
-
-                results.Add(new ScenarioResult(
-                    scenario.Id, scenario.Title, true, 0, 0, 0, 0,
-                    mockPlan, "MOCK", null));
+                var mock = $"[MOCK] {scenario.ExpectedSpeaker} -> {scenario.ExpectedListener}: render bez AI planneru.";
+                Console.WriteLine(mock);
+                results.Add(new ScenarioResult(scenario.Id, scenario.Title, true, 0, 0, 0, mock, null));
                 continue;
             }
 
-            var totalClock = Stopwatch.StartNew();
+            var render = await RenderScene(client, model, enableThinking, scenario);
 
-            var planResult = await CreateAndValidatePlan(
-                client, model, enableThinking, scenario);
-
-            if (!planResult.IsValid)
+            if (render.Error is not null)
             {
-                totalClock.Stop();
-                Console.Error.WriteLine("PLÁN ZAMÍTNUT:");
-                Console.Error.WriteLine(planResult.Error);
-
+                Console.Error.WriteLine($"RENDER SELHAL: {render.Error}");
                 results.Add(new ScenarioResult(
-                    scenario.Id, scenario.Title, false,
-                    planResult.ElapsedSeconds, 0,
-                    planResult.InputTokens, planResult.OutputTokens,
-                    planResult.Plan, "", planResult.Error));
+                    scenario.Id, scenario.Title, false, render.ElapsedSeconds,
+                    render.InputTokens, render.OutputTokens, "", render.Error));
                 continue;
             }
 
-            Console.WriteLine("[PLÁN OK]");
-            Console.WriteLine(JsonSerializer.Serialize(planResult.Plan, Json));
-
-            var renderResult = await RenderScene(
-                client, model, enableThinking, scenario, planResult.Plan!);
-
-            totalClock.Stop();
-
-            if (renderResult.Error is not null)
-            {
-                Console.Error.WriteLine($"RENDER SELHAL: {renderResult.Error}");
-                results.Add(new ScenarioResult(
-                    scenario.Id, scenario.Title, false,
-                    planResult.ElapsedSeconds, renderResult.ElapsedSeconds,
-                    planResult.InputTokens + renderResult.InputTokens,
-                    planResult.OutputTokens + renderResult.OutputTokens,
-                    planResult.Plan, "", renderResult.Error));
-                continue;
-            }
-
-            Console.WriteLine("[VÝSLEDNÝ TEXT]");
-            Console.WriteLine(renderResult.Text);
+            Console.WriteLine(render.Text);
             Console.WriteLine(
-                $"Plán: {planResult.ElapsedSeconds:F2} s | render: {renderResult.ElapsedSeconds:F2} s | " +
-                $"celkem: {totalClock.Elapsed.TotalSeconds:F2} s | " +
-                $"tokeny in/out: {planResult.InputTokens + renderResult.InputTokens}/" +
-                $"{planResult.OutputTokens + renderResult.OutputTokens} | " +
-                $"slova: {CountWords(renderResult.Text)}");
+                $"Doba: {render.ElapsedSeconds:F2} s | tokeny in/out: {render.InputTokens}/{render.OutputTokens} | " +
+                $"počet slov: {CountWords(render.Text)}");
 
             results.Add(new ScenarioResult(
-                scenario.Id, scenario.Title, true,
-                planResult.ElapsedSeconds, renderResult.ElapsedSeconds,
-                planResult.InputTokens + renderResult.InputTokens,
-                planResult.OutputTokens + renderResult.OutputTokens,
-                planResult.Plan, renderResult.Text, null));
+                scenario.Id, scenario.Title, true, render.ElapsedSeconds,
+                render.InputTokens, render.OutputTokens, render.Text, null));
         }
 
         var report = new RunReport(
@@ -148,178 +100,51 @@ internal static class Program
         return results.Any(r => !r.Success) ? 1 : 0;
     }
 
-    private static async Task<PlanResult> CreateAndValidatePlan(
+    private static async Task<RenderResult> RenderScene(
         HttpClient client,
         string model,
         bool enableThinking,
         Scenario scenario)
     {
         var system = """
-            Jsi plánovací vrstva RPGSandbox.
-            Nejsi vypravěč. Neprodukuj prózu.
-            Z poskytnutého kontraktu vyber pouze povolená fakta a zachovej přesně role.
-            Vrať pouze validní JSON bez markdownu a bez dalšího textu.
-
-            Povinný tvar:
-            {
-              "speaker": "jméno nebo NARRATOR",
-              "listener": "jméno nebo PLAYER",
-              "perspective": "second_person nebo dialogue",
-              "factIds": ["F1"],
-              "flavorIds": ["A1"],
-              "newFacts": []
-            }
-
-            Pravidla:
-            - speaker, listener a perspective musí přesně odpovídat EXPECTED hodnotám.
-            - factIds smějí obsahovat pouze ID z ALLOWED FACT IDS.
-            - všechny REQUIRED FACT IDS musí být ve factIds.
-            - flavorIds smějí obsahovat pouze ID z ALLOWED FLAVOR IDS.
-            - newFacts musí být vždy prázdné pole.
-            - Nevymýšlej žádné nové skutečnosti.
-            """;
-
-        var prompt = $"""
-            SCÉNA: {scenario.Title}
-            EXPECTED SPEAKER: {scenario.ExpectedSpeaker}
-            EXPECTED LISTENER: {scenario.ExpectedListener}
-            EXPECTED PERSPECTIVE: {scenario.ExpectedPerspective}
-
-            ALLOWED FACT IDS:
-            {IdBullets(scenario.Facts)}
-
-            REQUIRED FACT IDS:
-            {Bullets(scenario.RequiredFactIds)}
-
-            ALLOWED FLAVOR IDS:
-            {IdBullets(scenario.Flavor)}
-
-            ZAKÁZANÉ SKUTEČNOSTI:
-            {Bullets(scenario.ForbiddenFacts)}
-
-            ZÁMĚR HRÁČE:
-            {scenario.PlayerAction}
-
-            OVĚŘENÝ VÝSLEDEK ENGINU:
-            {scenario.EngineResult}
-            """;
-
-        var request = new
-        {
-            model,
-            stream = false,
-            think = enableThinking,
-            format = "json",
-            options = new { temperature = 0.0, num_predict = 180 },
-            messages = new[]
-            {
-                new { role = "system", content = system },
-                new { role = "user", content = prompt }
-            }
-        };
-
-        var clock = Stopwatch.StartNew();
-        try
-        {
-            using var response = await client.PostAsJsonAsync("api/chat", request, Json);
-            var body = await response.Content.ReadAsStringAsync();
-            clock.Stop();
-
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {body}");
-
-            var parsed = JsonSerializer.Deserialize<OllamaResponse>(body, Json);
-            var content = parsed?.Message?.Content?.Trim() ?? "";
-            var plan = JsonSerializer.Deserialize<ScenePlan>(content, Json);
-
-            if (plan is null)
-                return PlanResult.Invalid("Model nevrátil čitelný plán.", clock.Elapsed.TotalSeconds,
-                    parsed?.PromptEvalCount ?? 0, parsed?.EvalCount ?? 0);
-
-            var validationError = ValidatePlan(scenario, plan);
-            if (validationError is not null)
-                return new PlanResult(false, plan, validationError, clock.Elapsed.TotalSeconds,
-                    parsed?.PromptEvalCount ?? 0, parsed?.EvalCount ?? 0);
-
-            return new PlanResult(true, plan, null, clock.Elapsed.TotalSeconds,
-                parsed?.PromptEvalCount ?? 0, parsed?.EvalCount ?? 0);
-        }
-        catch (Exception ex)
-        {
-            clock.Stop();
-            return PlanResult.Invalid(ex.Message, clock.Elapsed.TotalSeconds, 0, 0);
-        }
-    }
-
-    private static string? ValidatePlan(Scenario scenario, ScenePlan plan)
-    {
-        if (!string.Equals(plan.Speaker, scenario.ExpectedSpeaker, StringComparison.Ordinal))
-            return $"speaker '{plan.Speaker}' != '{scenario.ExpectedSpeaker}'";
-
-        if (!string.Equals(plan.Listener, scenario.ExpectedListener, StringComparison.Ordinal))
-            return $"listener '{plan.Listener}' != '{scenario.ExpectedListener}'";
-
-        if (!string.Equals(plan.Perspective, scenario.ExpectedPerspective, StringComparison.Ordinal))
-            return $"perspective '{plan.Perspective}' != '{scenario.ExpectedPerspective}'";
-
-        var allowedFacts = scenario.Facts.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
-        var factIds = (plan.FactIds ?? new()).ToHashSet(StringComparer.Ordinal);
-
-        if (factIds.Any(id => !allowedFacts.Contains(id)))
-            return "Plán použil nepovolené factId.";
-
-        if (scenario.RequiredFactIds.Any(id => !factIds.Contains(id)))
-            return "Plánu chybí povinné factId.";
-
-        var allowedFlavor = scenario.Flavor.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
-        if ((plan.FlavorIds ?? new()).Any(id => !allowedFlavor.Contains(id)))
-            return "Plán použil nepovolené flavorId.";
-
-        if (plan.NewFacts is { Count: > 0 })
-            return "Plán obsahuje newFacts, což je zakázané.";
-
-        return null;
-    }
-
-    private static async Task<RenderResult> RenderScene(
-        HttpClient client,
-        string model,
-        bool enableThinking,
-        Scenario scenario,
-        ScenePlan plan)
-    {
-        var selectedFacts = scenario.Facts
-            .Where(x => plan.FactIds.Contains(x.Id))
-            .ToList();
-
-        var selectedFlavor = scenario.Flavor
-            .Where(x => plan.FlavorIds.Contains(x.Id))
-            .ToList();
-
-        var system = """
             Jsi stylistický renderer českého narativního RPG RPGSandbox.
-            ENGINE už rozhodl scénu a plán prošel validací.
-            Nesmíš přidat žádný nový kanonický detail.
+            Herní engine už rozhodl scénu. Dostáváš hotový Engine Contract.
+            Tvým jediným úkolem je převést ho do krátké, přirozené české prózy.
 
-            Piš přirozenou současnou češtinou jako kvalitní české RPG.
-            Vyhýbej se překladovým obratům, patosu, klišé a vysvětlování emocí, které nejsou zadány.
-            Dodrž přesně speaker, listener a perspective.
-            Pokud detail není v APPROVED FACTS nebo APPROVED FLAVOR, raději ho vynech.
-            Nevysvětluj engine ani herní mechaniky.
-            Výstup je pouze finální herní próza, bez nadpisů a bez komentáře.
-            Cílová délka je 30–70 slov.
+            Absolutní pravidla:
+            - Nepřidávej žádnou osobu, místo, objekt, podnik, událost, motiv, příčinu, pověst ani vztah, které nejsou výslovně uvedené v kontraktu.
+            - Nepřidávej žádný nový kanonický detail ani "logické" doplnění.
+            - Povolená atmosféra je přesně vymezena v ALLOWED FLAVOR; nic dalšího nevymýšlej.
+            - Dodrž přesně SPEAKER, LISTENER a PERSPECTIVE.
+            - second_person vždy znamená české tykání ve 2. osobě jednotného čísla: "vidíš", "slyšíš", "stojíš", nikdy "vidíte".
+            - Pokud je perspective dialogue, nesmíš prohodit, kdo mluví a kdo poslouchá.
+            - Pokud něco není uvedeno, vynech to.
+            - Nevysvětluj emoce ani skryté úmysly, pokud nejsou mezi fakty.
+            - Nevysvětluj engine, hody, testy ani pravidla.
+            - Piš přirozenou současnou češtinou jako kvalitní české RPG, ne jako doslovný překlad.
+            - Vyhýbej se patosu, klišé, poetickým metaforám a komentářům vypravěče.
+            - Výstup je pouze finální herní text, bez nadpisů a bez komentáře.
+            - Cílová délka 20–60 slov. Kratší správný text je lepší než delší text s domyšlenými detaily.
             """;
 
         var prompt = $"""
-            SPEAKER: {plan.Speaker}
-            LISTENER: {plan.Listener}
-            PERSPECTIVE: {plan.Perspective}
+            SCÉNA:
+            {scenario.Title}
 
-            APPROVED FACTS:
-            {TextBullets(selectedFacts)}
+            SPEAKER:
+            {scenario.ExpectedSpeaker}
 
-            APPROVED FLAVOR:
-            {TextBullets(selectedFlavor)}
+            LISTENER:
+            {scenario.ExpectedListener}
+
+            PERSPECTIVE:
+            {scenario.ExpectedPerspective}
+
+            CANONICAL FACTS:
+            {TextBullets(scenario.Facts)}
+
+            ALLOWED FLAVOR:
+            {TextBullets(scenario.Flavor)}
 
             FORBIDDEN:
             {Bullets(scenario.ForbiddenFacts)}
@@ -330,7 +155,7 @@ internal static class Program
             ENGINE RESULT:
             {scenario.EngineResult}
 
-            Napiš pouze výslednou scénu.
+            Napiš pouze výslednou scénu. Neuváděj nic mimo kontrakt.
             """;
 
         var request = new
@@ -338,7 +163,7 @@ internal static class Program
             model,
             stream = false,
             think = enableThinking,
-            options = new { temperature = 0.35, num_predict = 180 },
+            options = new { temperature = 0.18, num_predict = 140 },
             messages = new[]
             {
                 new { role = "system", content = system },
@@ -357,6 +182,7 @@ internal static class Program
                 throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {body}");
 
             var parsed = JsonSerializer.Deserialize<OllamaResponse>(body, Json);
+
             return new RenderResult(
                 parsed?.Message?.Content?.Trim() ?? "",
                 null,
@@ -379,9 +205,6 @@ internal static class Program
         var list = items?.ToList() ?? new List<string>();
         return list.Count > 0 ? string.Join("\n", list.Select(x => "- " + x)) : "- žádné";
     }
-
-    private static string IdBullets(IEnumerable<ContractItem> items) =>
-        string.Join("\n", items.Select(x => $"- {x.Id}: {x.Text}"));
 
     private static string TextBullets(IEnumerable<ContractItem> items)
     {
@@ -409,17 +232,8 @@ internal static class Program
         string ExpectedListener,
         string ExpectedPerspective,
         List<ContractItem> Facts,
-        List<string> RequiredFactIds,
         List<ContractItem> Flavor,
         List<string> ForbiddenFacts);
-
-    private sealed record ScenePlan(
-        string Speaker,
-        string Listener,
-        string Perspective,
-        List<string> FactIds,
-        List<string> FlavorIds,
-        List<string> NewFacts);
 
     private sealed record OllamaMessage(string? Content);
 
@@ -427,18 +241,6 @@ internal static class Program
         OllamaMessage? Message,
         [property: JsonPropertyName("prompt_eval_count")] int? PromptEvalCount,
         [property: JsonPropertyName("eval_count")] int? EvalCount);
-
-    private sealed record PlanResult(
-        bool IsValid,
-        ScenePlan? Plan,
-        string? Error,
-        double ElapsedSeconds,
-        int InputTokens,
-        int OutputTokens)
-    {
-        public static PlanResult Invalid(string error, double elapsed, int input, int output) =>
-            new(false, null, error, elapsed, input, output);
-    }
 
     private sealed record RenderResult(
         string Text,
@@ -451,11 +253,9 @@ internal static class Program
         string Id,
         string Title,
         bool Success,
-        double PlanSeconds,
-        double RenderSeconds,
+        double ElapsedSeconds,
         int InputTokens,
         int OutputTokens,
-        ScenePlan? Plan,
         string Output,
         string? Error);
 
