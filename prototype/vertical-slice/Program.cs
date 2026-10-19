@@ -358,15 +358,15 @@ internal sealed class GameEngine
         return EngineResult.Reject("Cíl si teď nemůžeš bezpečně prohlédnout z aktuální lokace.");
     }
 
-    private static EngineResult ResolveMoveTo(WorldState state, string? target)
+    private EngineResult ResolveMoveTo(WorldState state, string? target)
     {
-        var location = WorldData.ResolveDestination(target, state);
+        var location = _world.ResolveDestination(target, state);
         if (location is null)
             return EngineResult.Reject("Nevíš, kam přesně by tato cesta měla vést.");
 
         if (location == state.Location)
         {
-            var person = WorldData.CanonicalEntity(target);
+            var person = _world.CanonicalPersonName(target);
             if (person is not null)
                 return ResolveApproach(state, person);
             return EngineResult.Answer("Už na tom místě jsi.");
