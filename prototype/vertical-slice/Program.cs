@@ -24,9 +24,13 @@ internal static class Program
         await store.InitializeAsync();
         var state = await store.LoadOrCreateAsync();
 
+        using var world = new WorldGraph(savePath);
+        world.Initialize(state);
+        world.SyncPlayerState(state);
+
         using var renderer = new OllamaRenderer(ollamaUrl, rendererModel, noAi);
         using var interpreter = new OllamaSemanticInterpreter(ollamaUrl, semanticModel, noSemanticAi);
-        var engine = new GameEngine(store, renderer, interpreter);
+        var engine = new GameEngine(store, renderer, interpreter, world);
 
         PrintHeader(rendererModel, semanticModel, savePath, noAi, noSemanticAi);
         await engine.RenderArrivalAsync(state);
@@ -63,6 +67,8 @@ internal static class Program
             {
                 state = WorldState.NewGame();
                 await store.ResetAsync(state);
+                world.ResetAndSeed(state);
+                world.SyncPlayerState(state);
                 engine.ResetContext();
                 Console.WriteLine("Svět vertical slice byl resetován.");
                 await engine.RenderArrivalAsync(state);
@@ -80,11 +86,11 @@ internal static class Program
         bool noAi,
         bool noSemanticAi)
     {
-        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.3 Semantic Actions");
+        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.4 World Graph & Concretization");
         Console.WriteLine($"Vypravěč: {(noAi ? "fallback bez AI" : rendererModel)}");
         Console.WriteLine($"Interpret významu: {(noSemanticAi ? "jen lokální rychlá pravidla" : semanticModel)}");
         Console.WriteLine($"Save: {Path.GetFullPath(savePath)}");
-        Console.WriteLine("Napiš, co chceš udělat nebo zjistit. AI překládá jazyk, engine rozhoduje svět.");
+        Console.WriteLine("Napiš, co chceš udělat nebo zjistit. AI překládá jazyk, engine pracuje nad persistentním grafem světa.");
     }
 
     private static void PrintHelp()
