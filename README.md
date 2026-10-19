@@ -31,10 +31,11 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [MVP](docs/mvp.md)
 - [Volné nápady](docs/ideas.md)
 
-## První prototyp
+## Prototypy
 
+- [Rabenfeld vertical slice – první souvislá hratelná smyčka](prototype/vertical-slice/README.md)
 - [Lokální AI: české dialogy a měření odezvy](prototype/local-ai/README.md)
 
 ## Stav projektu
 
-Projekt je v koncepční fázi. V této etapě sbíráme a zpřesňujeme principy hry, datový model a hranice prvního MVP před samotnou implementací.
+Projekt přešel z čistě koncepční fáze do raného prototypování. Aktuální vertical slice ověřuje souvislou herní smyčku, kanonický stav v SQLite, Engine Contract a lokální AI pouze jako narativní renderer.
