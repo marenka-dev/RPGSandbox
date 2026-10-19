@@ -58,3 +58,17 @@ Před každým narativním výstupem engine sestaví Scene Contract obsahující
 - explicitně zakázané domyšlené skutečnosti, pokud jsou pro scénu rizikové.
 
 AI funguje jako stylistický renderer: vytváří přirozenou češtinu, dialog a atmosféru, ale nesmí přidávat osoby, události, motivace, předměty, pověsti, ekonomické důvody ani jiné skutečnosti, které engine neposkytl. Pokud detail není definován, je bezpečnější ho vynechat než doplnit. Tento princip snižuje halucinace a umožňuje použít menší rychlejší lokální model.
+
+
+## Interpretace přirozeného vstupu
+
+Schválený princip pro vstup hráče je **AI chápe jazyk, engine chápe svět**.
+
+Vstup se zpracovává ve vrstvách:
+1. jednoduché informační dotazy nad známým stavem světa zodpoví engine přímo a bez AI;
+2. jednoznačné běžné akce rozpozná deterministický parser;
+3. nejasnější přirozený text může zpracovat samostatný AI intent interpreter, který vrací pouze strukturovaný návrh akce (např. intent a cíl), nikoli výsledek;
+4. engine návrh validuje podle aktuální lokace, dostupných entit, pravidel a kanonického stavu;
+5. pouze engine provede změnu světa a sestaví Scene/Engine Contract pro narativní renderer.
+
+Intent interpreter nesmí vytvářet osoby, fakta, úspěch akce ani měnit databázi. Prototyp v0.2 používá jako pracovní rozdělení rolí Qwen3 8B pro rychlou strukturovanou interpretaci a Gemma 3 12B pro český narativní render; nejde zatím o definitivní modely distribuce.
