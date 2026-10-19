@@ -358,6 +358,77 @@ internal sealed class WorldGraph : IDisposable
 
     public string EnsureInnBeer() => ConcretizeInnBeer();
 
+    public bool TryTake(string? raw, WorldState state, out string message)
+    {
+        var id = ResolveEntityId(raw);
+        if (id is null)
+        {
+            message = "Takový předmět svět v aktuálním detailu nezná.";
+            return false;
+        }
+
+        if (FactValue(id, "carryable") != "true")
+        {
+            message = $"{EntityName(id)} není podle současných vlastností přenositelný předmět.";
+            return false;
+        }
+
+        if (FactObject(id, "location") != LocationIdToEntity(state.Location))
+        {
+            message = $"{EntityName(id)} není v tvé aktuální lokaci.";
+            return false;
+        }
+
+        DeleteFacts(id, "location");
+        ReplaceFact(id, "carried_by", objectId: "player");
+        KnowEntity(id);
+        message = $"Zvedl jsi předmět {EntityName(id)}.";
+        return true;
+    }
+
+    public bool TryPut(string? raw, string? targetRaw, string? purpose, WorldState state, out string message)
+    {
+        var id = ResolveEntityId(raw);
+        var target = ResolveEntityId(targetRaw);
+        if (id is null || target is null)
+        {
+            message = "Předmět nebo cíl se nepodařilo ve světě jednoznačně určit.";
+            return false;
+        }
+
+        if (FactObject(id, "carried_by") != "player")
+        {
+            message = $"{EntityName(id)} právě neneseš.";
+            return false;
+        }
+
+        if (FactObject(target, "location") != LocationIdToEntity(state.Location))
+        {
+            message = $"{EntityName(target)} není v aktuální lokaci.";
+            return false;
+        }
+
+        var normalizedPurpose = TextNorm.Normalize(purpose ?? "");
+        if (normalizedPurpose.Contains("block") || normalizedPurpose.Contains("zablok"))
+        {
+            if (FactValue(target, "blockable") != "true")
+            {
+                message = $"{EntityName(target)} podle současného modelu nelze tímto způsobem blokovat.";
+                return false;
+            }
+            ReplaceFact(id, "blocks", objectId: target);
+        }
+
+        DeleteFacts(id, "carried_by");
+        ReplaceFact(id, "location", objectId: LocationIdToEntity(state.Location));
+        ReplaceFact(id, "near", objectId: target);
+        message = $"Umístil jsi {EntityName(id)} k objektu {EntityName(target)}.";
+        return true;
+    }
+
+    public string OfferingName(string id) => EntityName(id);
+
+
     public string EntityNameFromRaw(string? raw) =>
         ResolveEntityId(raw) is { } id ? EntityName(id) : raw ?? "";
 
@@ -459,6 +530,16 @@ internal sealed class WorldGraph : IDisposable
         cmd.Parameters.AddWithValue("$p", predicate);
         cmd.Parameters.AddWithValue("$o", (object?)objectId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$v", (object?)value ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    }
+
+
+    private void DeleteFacts(string subject, string predicate)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = "DELETE FROM world_facts WHERE subject=$s AND predicate=$p;";
+        cmd.Parameters.AddWithValue("$s", subject);
+        cmd.Parameters.AddWithValue("$p", predicate);
         cmd.ExecuteNonQuery();
     }
 
