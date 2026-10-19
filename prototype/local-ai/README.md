@@ -1,4 +1,4 @@
-# RPGSandbox: lokální AI prototyp 0.4 – Scene Contract
+# RPGSandbox: lokální AI prototyp 0.5 – validovaný Scene Plan
 
 Samostatná konzolová diagnostika českého vyprávění, rychlosti odpovědí a respektování kanonického stavu světa. Zatím **nejde o hru ani o skutečně dokončený simulační engine**. `engineResult` jsou předem připravené testovací výsledky, které budoucí engine předá AI. První běh vyžaduje .NET SDK 8 a pro skutečné AI odpovědi lokálně spuštěnou Ollamu s instalovaným kompatibilním modelem.
 
@@ -100,3 +100,37 @@ Při hodnocení sleduj především:
 4. dobu odezvy.
 
 Cílem benchmarku 0.4 není zjistit, který model nejvíc improvizuje, ale který model nejlépe **odvypráví už rozhodnutou scénu**.
+
+
+## Benchmark 0.5 – validovaný Scene Plan
+
+Verze 0.5 přidává dvoukrokový AI pipeline:
+
+1. **Plan:** model vrátí pouze JSON s rolemi, perspektivou a ID faktů/flavoru, které chce použít.
+2. **Engine validation:** program ověří speaker, listener, perspective, povinné factId, nepovolená ID a prázdné `newFacts`.
+3. **Render:** pouze validovaný plán je předán druhému AI požadavku, který vytvoří finální českou prózu.
+
+Cílem je zachytit prohazování rolí a část halucinací ještě před zobrazením textu hráči.
+
+Po aktualizaci:
+
+```powershell
+git pull
+cd prototype\local-ai
+dotnet run -- --mock
+```
+
+Pro první skutečný test doporučujeme Gemma 3 12B:
+
+```powershell
+dotnet run -- --model gemma3:12b --report report-gemma3-v05.json
+```
+
+Pro porovnání:
+
+```powershell
+dotnet run -- --model qwen3:8b --report report-qwen3-v05.json
+dotnet run -- --model aya-expanse:8b --report report-aya-v05.json
+```
+
+Důležité: 0.5 používá dva AI požadavky na scénu, takže celková latence bude vyšší. Měříme zvlášť čas plánování a renderu. Pokud kvalita výrazně vzroste, později lze plánovací krok nahradit levnějším/malým modelem nebo část validace převést zcela do enginu.
