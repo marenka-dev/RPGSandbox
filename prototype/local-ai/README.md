@@ -1,4 +1,4 @@
-# RPGSandbox: lokální AI prototyp 0.3 – český vypravěč
+# RPGSandbox: lokální AI prototyp 0.4 – Scene Contract
 
 Samostatná konzolová diagnostika českého vyprávění, rychlosti odpovědí a respektování kanonického stavu světa. Zatím **nejde o hru ani o skutečně dokončený simulační engine**. `engineResult` jsou předem připravené testovací výsledky, které budoucí engine předá AI. První běh vyžaduje .NET SDK 8 a pro skutečné AI odpovědi lokálně spuštěnou Ollamu s instalovaným kompatibilním modelem.
 
@@ -71,3 +71,32 @@ dotnet run -- --model qwen3:8b --report report-qwen3-v03.json
 ```
 
 Výstupy hodnotit podle [CZECH-SCORECARD.md](CZECH-SCORECARD.md). Aya Expanse je vhodná pro experiment, ale před případnou distribucí či komerčním použitím je nutné samostatně ověřit licenci konkrétního modelu. Výběr modelu pro hru zatím není schválen.
+
+
+## Benchmark 0.4 – Scene Contract
+
+Od verze 0.4 AI už nedostává pouze obecný kontext a výsledek. Engine jí předává **Scene Contract** rozdělený na:
+- kanonická fakta, která musí zachovat;
+- povolenou smyslovou dekoraci, kterou smí použít bez změny světa;
+- zakázaná fakta, která nesmí doplnit.
+
+Výchozí scénáře jsou v `scenarios-scene-contract-v04.json`.
+
+Po aktualizaci repozitáře spusť stejné scénáře na jednotlivých modelech:
+
+```powershell
+git pull
+cd prototype\local-ai
+
+dotnet run -- --model qwen3:8b --report report-qwen3-v04.json
+dotnet run -- --model aya-expanse:8b --report report-aya-v04.json
+dotnet run -- --model gemma3:12b --report report-gemma3-v04.json
+```
+
+Při hodnocení sleduj především:
+1. přirozenost češtiny;
+2. zda model nepřidává zakázané skutečnosti;
+3. zda umí vytvořit atmosféru i s omezeným prostorem pro improvizaci;
+4. dobu odezvy.
+
+Cílem benchmarku 0.4 není zjistit, který model nejvíc improvizuje, ale který model nejlépe **odvypráví už rozhodnutou scénu**.
