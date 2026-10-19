@@ -133,7 +133,10 @@ internal static class Program
         return 0;
     }
 
-    private static int CountWords(string answer) => answer.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;\n\n    private static string Bullets(List<string>? items) => items is { Count: > 0 } ? string.Join("\\n", items.Select(x => "- " + x)) : "- žádné";
+    private static int CountWords(string answer) => answer.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static string Bullets(List<string>? items) =>
+        items is { Count: > 0 } ? string.Join("\n", items.Select(x => "- " + x)) : "- žádné";
 
     private static string? Option(string[] args, string name)
     {
@@ -143,7 +146,15 @@ internal static class Program
         return null;
     }
 
-    private sealed record Scenario(string Id, string Title, string Context, string PlayerAction, string EngineResult,\n        List<string>? SceneFacts, List<string>? AllowedFlavor, List<string>? ForbiddenFacts);
+    private sealed record Scenario(
+        string Id,
+        string Title,
+        string Context,
+        string PlayerAction,
+        string EngineResult,
+        List<string>? SceneFacts,
+        List<string>? AllowedFlavor,
+        List<string>? ForbiddenFacts);
     private sealed record OllamaMessage(string? Content);
     private sealed record OllamaResponse(OllamaMessage? Message,
         [property: JsonPropertyName("prompt_eval_count")] int? PromptEvalCount,
