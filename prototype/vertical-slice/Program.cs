@@ -252,10 +252,9 @@ internal sealed class GameEngine
 
     private EngineResult ResolveQuery(WorldState state, SemanticCommand command)
     {
-        var op = command.Op;
-        var subject = WorldData.CanonicalEntity(command.Subject ?? command.Target);
+        var subject = command.Subject ?? command.Target;
 
-        return op switch
+        return command.Op switch
         {
             "current_location" =>
                 EngineResult.Answer($"Jsi v lokaci: {WorldData.LocationName(state.Location)}."),
@@ -266,74 +265,51 @@ internal sealed class GameEngine
             "money" =>
                 EngineResult.Answer($"Máš {state.MoneyGroats} grošů."),
 
+            "inventory" =>
+                EngineResult.Answer(_world.InventoryAnswer(state)),
+
             "known_people" =>
-                EngineResult.Answer("Z lidí, které skutečně znáš, je pro tento prototyp evidován Matěj, hostinský U Tří korun."),
+                EngineResult.Answer($"Z aktuálně známých entit: {string.Join(", ", _world.KnownNames())}."),
 
-            "visible_people" =>
-                EngineResult.Answer(WorldData.VisiblePeopleAnswer(state.Location)),
+            "visible_people" or "contents" =>
+                EngineResult.Answer(_world.ContentsAnswer(state.Location)),
 
-            "location_of" when subject is not null =>
-                ResolveLocationQuery(state, subject),
+            "describe" =>
+                EngineResult.Answer(_world.Describe(subject ?? "player", state)),
+
+            "can_perceive" =>
+                EngineResult.Answer(_world.PerceptionAnswer(subject, state)),
+
+            "location_of" =>
+                ResolveLocationQuery(subject),
 
             "exists_here" =>
-                ResolveExistsHere(state, command),
+                EngineResult.Answer(_world.ExistsHereAnswer(subject, state)),
 
-            "property" when subject is not null =>
-                ResolvePropertyQuery(state, subject, command.Predicate),
+            "property" =>
+                EngineResult.Answer(_world.PropertyAnswer(subject, command.Predicate, state)),
 
             "available_social_contact" =>
-                EngineResult.Answer(WorldData.AvailableSocialContactAnswer(state.Location)),
+                EngineResult.Answer(_world.AvailableSocialContactAnswer(state.Location)),
 
             _ =>
-                EngineResult.Answer("Na takto položený dotaz zatím engine nemá ve svém znalostním modelu spolehlivou odpověď.")
+                EngineResult.Answer("Dotaz je srozumitelný, ale tento typ vztahu zatím World Graph neumí vyhodnotit.")
         };
     }
 
-    private static EngineResult ResolveLocationQuery(WorldState state, string subject)
+    private EngineResult ResolveLocationQuery(string? subject)
     {
-        var knownLocation = WorldData.KnownLocationOf(subject, state);
+        var knownLocation = _world.KnownLocationOf(subject);
         if (knownLocation is null)
-            return EngineResult.Answer($"Nevíš spolehlivě, kde se {WorldData.DisplayName(subject)} právě nachází.");
+            return EngineResult.Answer($"Nevíš spolehlivě, kde se „{subject}“ právě nachází.");
 
         return EngineResult.Answer(
-            $"{WorldData.DisplayName(subject)} je podle tvých aktuálních znalostí v lokaci: {WorldData.LocationName(knownLocation.Value)}.");
-    }
-
-    private static EngineResult ResolveExistsHere(WorldState state, SemanticCommand command)
-    {
-        var subject = TextNorm.Normalize(command.Subject ?? "");
-        if (subject.Contains("stan"))
-        {
-            return state.Location == LocationId.MarketSquare
-                ? EngineResult.Answer("Ano. Na náměstí je více tržních stánků, ale většinu z nich zatím nerozlišuješ jako samostatná známá místa.")
-                : EngineResult.Answer("V této lokaci žádné tržní stánky evidované nemáš.");
-        }
-
-        if (subject.Contains("lid") || subject.Contains("nekdo") || subject.Contains("osob"))
-            return EngineResult.Answer(WorldData.AvailableSocialContactAnswer(state.Location));
-
-        return EngineResult.Answer("Z dostupných znalostí to nedokážeš určit.");
-    }
-
-    private static EngineResult ResolvePropertyQuery(
-        WorldState state,
-        string subject,
-        string? predicate)
-    {
-        var p = TextNorm.Normalize(predicate ?? "");
-
-        if (subject == "Havel" && (p.Contains("prodav") || p.Contains("zboz") || p.Contains("cena")))
-            return EngineResult.Answer($"Havel prodává obilí za {state.GrainPriceGroats} groše za míru.");
-
-        if (subject == "Matěj" && (p.Contains("povol") || p.Contains("prace")))
-            return EngineResult.Answer("Matěj je hostinský U Tří korun.");
-
-        return EngineResult.Answer("Tuto vlastnost zatím ze svých znalostí spolehlivě neznáš.");
+            $"{_world.EntityNameFromRaw(subject)} je podle tvých aktuálních znalostí v lokaci: {WorldData.LocationName(knownLocation.Value)}.");
     }
 
     private EngineResult ResolveAction(WorldState state, SemanticCommand command, string rawInput)
     {
-        var target = WorldData.CanonicalEntity(command.Target);
+        var target = _world.CanonicalPersonName(command.Target);
         var subject = WorldData.CanonicalSubject(command.Subject ?? _focusSubject);
 
         return command.Op switch
