@@ -330,18 +330,19 @@ internal sealed class WorldGraph : IDisposable
         return "V aktuální lokaci není dostupná další osoba k seznámení.";
     }
 
-    public string? ResolveDestination(string? raw, WorldState state)
+    public LocationId? ResolveDestination(string? raw, WorldState state)
     {
         var id = ResolveEntityId(raw);
         if (id is null) return null;
 
         if (EntityType(id) == "Location")
-            return id;
+            return EntityToLocationId(id);
 
         if (EntityType(id) == "Business" && id == "place.inn")
-            return "loc.inn.common";
+            return LocationId.InnCommonRoom;
 
-        return FactObject(id, "location");
+        var locationId = FactObject(id, "location");
+        return locationId is null ? null : EntityToLocationId(locationId);
     }
 
     public int? OfferingPrice(string? raw, WorldState state)
