@@ -1,103 +1,106 @@
-# RPGSandbox – Rabenfeld vertical slice v0.3 Semantic Actions
+# RPGSandbox – Rabenfeld vertical slice v0.4 World Graph & Concretization
 
-Vertical slice už nepoužívá rostoucí seznam konkrétních intentů typu `AskFood`, `AskSecret` nebo `BargainHalf`. Hráčův text se převádí na malý obecný sémantický jazyk, který engine validuje proti skutečnému stavu světa.
+v0.4 propojuje sémantické akce s persistentním **World Graphem**. Cílem je, aby engine nereagoval na konkrétní věty ručně napsanými odpověďmi, ale pracoval s obecnými entitami, vlastnostmi a vztahy.
 
-## Hlavní princip
+## Základní vrstvy
 
-> **AI navrhuje význam a plán. Engine rozhoduje, co je ve světě možné a co se skutečně stalo.**
+1. **Objektivní svět** – kanonické entity a fakta.
+2. **Lazy detail** – dosud neurčené detaily lze konkretizovat pouze v mezích už existujícího světa.
+3. **Znalosti hráče** – samostatná vrstva toho, co hráč skutečně ví.
+4. **Semantic Actions / Queries** – jazyková vrstva nad světem.
+5. **Scene Contract** – Gemma pouze odvypráví výsledek enginu.
 
-Příklad:
+## World Graph
 
-```text
-Hráč: Tak za 3?
-```
-
-se v kontextu rozhovoru s Havlem může převést na:
-
-```json
-{
-  "kind": "action",
-  "op": "offer",
-  "target": "Havel",
-  "subject": "obilí",
-  "predicate": null,
-  "text": null,
-  "args": {
-    "price": "3"
-  }
-}
-```
-
-Engine následně ověří, že Havel je dostupný, že skutečně prodává obilí a jaká je kanonická cena. Až potom určí výsledek.
-
-## Obecné operace v0.3
-
-Action operace:
+SQLite nyní obsahuje mimo původní save také:
 
 ```text
-observe
-inspect
-move_to
-approach
-speak
-ask
-tell
-request
-offer
-wait
+world_entities
+world_facts
+player_knowledge
 ```
 
-Query operace:
+Příklady objektivních vztahů:
 
 ```text
-current_location
-time
-money
-known_people
-visible_people
-location_of
-exists_here
-property
-available_social_contact
+Matěj --profession--> hostinský
+Matěj --location--> U Tří korun
+Havel --profession--> kupec
+Havel --sells--> obilí
+Havel --price:obilí--> 4
+židle --carryable--> true
+dveře --blockable--> true
 ```
 
-Nejde o konečný seznam celé hry. Smyslem je, aby operace byly **obecné a skládací**. Nová formulace hráče nemá vyžadovat nový intent, pokud její význam lze vyjádřit existujícími operacemi a parametry.
+Objektivní fakt automaticky neznamená, že jej hráč zná.
 
-## World Query
+## Lazy concretization
 
-Otázky hráče se pokud možno nepřekládají na pevně napsanou odpověď, ale na dotaz nad stavem a znalostmi světa.
+v0.4 obsahuje dva malé experimenty.
 
-Například:
+### Nabídka hostince
+
+Hostinec má od začátku makro-vlastnost:
 
 ```text
-Kde je Matěj?
-→ kind=query, op=location_of, subject=Matěj
-
-Jsou tu další stánky?
-→ kind=query, op=exists_here, subject=stánky
-
-Můžu se s někým seznámit?
-→ kind=query, op=available_social_contact
+service_category = food_and_drink
+ordinary_medieval_inn = true
 ```
 
-Engine odpovídá jen z toho, co hráč skutečně ví nebo může v aktuální lokaci zjistit.
-
-## Kontext rozhovoru
-
-Engine si drží jednoduchý kontext:
-
-- aktuální konverzační cíl;
-- aktuální předmět hovoru.
-
-Díky tomu může:
+Pokud hráč poprvé řeší pivo, engine může z tohoto rámce konkretizovat persistentní nabídku:
 
 ```text
-Promluvím s Havlem.
-To je moc drahé.
-Tak za 3?
+pivo U Tří korun
+category = beer
+price_groats = 1
+offered_at = U Tří korun
 ```
 
-znamenat postupně rozhovor s Havlem → téma obilí/cena → nabídku 3 grošů, bez nutnosti opakovat jméno ani předmět.
+Od této chvíle je existence i cena kanonická a uložená v databázi. AI cenu nevymýšlí.
+
+### Dosud anonymní obyvatel
+
+Tržiště má makro-vrstvu obyvatel. Při požadavku na nový sociální kontakt může concretizer vytvořit persistentní NPC z tohoto populačního rámce. Prototyp používá deterministický první příklad, aby šlo ověřit perzistenci.
+
+## Obecnější dotazy
+
+Nové query operace zahrnují také:
+
+```text
+inventory
+describe
+can_perceive
+contents
+```
+
+Takže věty jako:
+
+```text
+Co mám u sebe?
+Kdo je Havel?
+Vidím Havla?
+Co vidím?
+```
+
+už míří na World Graph místo na ručně vybranou odpověď.
+
+## Affordances
+
+v0.4 zavádí první dvě fyzické operace:
+
+```text
+take
+put
+```
+
+Předměty mají schopnosti jako:
+
+```text
+židle --carryable--> true
+dveře --blockable--> true
+```
+
+Engine tedy může rozhodovat podle vlastností objektů, ne podle přesné věty hráče.
 
 ## Spuštění
 
@@ -108,38 +111,34 @@ dotnet restore
 dotnet run -- --model gemma3:12b --intent-model qwen3:8b
 ```
 
-Pro nový playtest doporučujeme ve hře:
+Doporučený čistý test:
 
 ```text
 reset
 ```
 
-## Co zkoušet
-
-Nesnaž se hledat správný příkaz. Zkoušej věty jako:
+Pak zkus přirozeně například:
 
 ```text
+Co mám u sebe?
+Jak vypadám?
 Kde je Matěj?
 Půjdu za Havlem.
-Co prodáváš?
-To je moc drahé.
-Tak za 3?
-Jsou tu i jiné stánky?
-Můžu se s někým seznámit?
-Co o Matějovi vlastně vím?
-Počkám deset minut.
+Vidím Havla?
+Kdo je Havel?
+Půjdu za Matějem.
+Prodávají zde pivo a kolik stojí?
+Dám si pivo.
+Kolik mám peněz?
+Půjdu do pokoje.
+Vezmu židli.
+Co mám u sebe?
 ```
 
-A klidně i něco, co engine ještě neumí:
+## Co v0.4 ještě není
 
-```text
-Vezmu židli a zablokuju s ní dveře.
-```
+World Graph je zatím malý prototypový model, ne kompletní obecný simulační svět. Concretizer má pouze několik bezpečných pravidel. Dlouhodobě nesmí generovat detail libovolně; vždy musí vycházet z makrosvěta, historie, kultury, ekonomiky, populace a dalších již kanonických omezení.
 
-Správné chování není „vymyslet výsledek“, ale bezpečně říct, že význam sice může být pochopen, ale engine zatím nemá fyzikální pravidla potřebná k jeho provedení.
+Zásadní pravidlo:
 
-## Důležité omezení prototypu
-
-v0.3 ještě není obecný simulační engine. Má jen první malý slovník operací a malý datový model Rabenfeldu. Cíl této verze je ověřit, že **počet přirozených vět hráče nemusí růst společně s počtem ručně programovaných intentů**.
-
-Renderer Gemma navíc dostává explicitní `CANONICAL LOCATION`, aby nevytvářel nové interiéry typu „Havlův krám“, pokud engine stále eviduje hráče na náměstí.
+> **Otázka hráče nevytváří svět. Pouze může vyvolat konkretizaci detailu, který byl dosud neurčený, ale musí být slučitelný s již existujícím světem.**
