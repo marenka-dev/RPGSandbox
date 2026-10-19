@@ -382,9 +382,9 @@ internal sealed class GameEngine
             $"Pavel se přesunul do lokace {WorldData.LocationName(location.Value)}.");
     }
 
-    private static EngineResult ResolveApproach(WorldState state, string? target)
+    private EngineResult ResolveApproach(WorldState state, string? target)
     {
-        if (target is null || !WorldData.IsVisible(target, state.Location))
+        if (target is null || !_world.IsVisible(target, state.Location))
             return EngineResult.Reject("Tuto osobu teď v aktuální lokaci nevidíš.");
 
         return EngineResult.Ok(
@@ -396,13 +396,13 @@ internal sealed class GameEngine
             target == "Havel" ? "obilí" : null);
     }
 
-    private static EngineResult ResolveSpeak(
+    private EngineResult ResolveSpeak(
         WorldState state,
         string? target,
         SemanticCommand command)
     {
         target ??= WorldData.DefaultConversationTarget(state.Location);
-        if (target is null || !WorldData.IsVisible(target, state.Location))
+        if (target is null || !_world.IsVisible(target, state.Location))
             return EngineResult.Reject("Nemáš tu nikoho odpovídajícího, ke komu bys mohl právě promluvit.");
 
         return EngineResult.Ok(
@@ -414,13 +414,13 @@ internal sealed class GameEngine
             target == "Havel" ? "obilí" : null);
     }
 
-    private static EngineResult ResolveAsk(
+    private EngineResult ResolveAsk(
         WorldState state,
         string? target,
         SemanticCommand command)
     {
         target ??= WorldData.DefaultConversationTarget(state.Location);
-        if (target is null || !WorldData.IsVisible(target, state.Location))
+        if (target is null || !_world.IsVisible(target, state.Location))
             return EngineResult.Reject("Adresát otázky není v aktuální lokaci dostupný.");
 
         var topic = command.Subject ?? command.Predicate ?? command.Text ?? "";
@@ -435,13 +435,13 @@ internal sealed class GameEngine
             knowledge.FocusSubject);
     }
 
-    private static EngineResult ResolveTell(
+    private EngineResult ResolveTell(
         WorldState state,
         string? target,
         SemanticCommand command)
     {
         target ??= WorldData.DefaultConversationTarget(state.Location);
-        if (target is null || !WorldData.IsVisible(target, state.Location))
+        if (target is null || !_world.IsVisible(target, state.Location))
             return EngineResult.Reject("Adresát sdělení není v aktuální lokaci dostupný.");
 
         var text = command.Text ?? command.Subject ?? "";
@@ -618,7 +618,10 @@ internal static class FastSemanticParser
         if (TextNorm.ContainsAny(n, "co mam u sebe", "jake mam veci", "mam jeste jine veci"))
             return SemanticCommand.Query("inventory");
 
-        if (TextNorm.ContainsAny(n, "jak vypadam", "kdo jsem"))
+        if (TextNorm.ContainsAny(n, "jak vypadam"))
+            return SemanticCommand.Query("property", subject: "player", predicate: "appearance");
+
+        if (TextNorm.ContainsAny(n, "kdo jsem"))
             return SemanticCommand.Query("describe", subject: "player");
 
         if (n.StartsWith("kdo je "))
@@ -664,7 +667,7 @@ internal static class FastSemanticParser
         if (TextNorm.ContainsAny(n, "dam si pivo", "objednam pivo", "chci pivo"))
             return SemanticCommand.Action("request", target: conversationTarget ?? "Matěj", subject: "pivo");
 
-        if (TextNorm.ContainsAny(n, "vezmu ", "zvednu "))
+        if (!n.Contains(" a ") && TextNorm.ContainsAny(n, "vezmu ", "zvednu "))
         {
             var subject = input[(input.IndexOf(' ') + 1)..].Trim(' ', '.', '?', '!');
             return SemanticCommand.Action("take", subject: subject);
@@ -776,6 +779,9 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
             - "Co mám u sebe?" je query inventory.
             - "Co vidím?" je query contents.
             - "Dám si pivo" je action request se subject "pivo"; nevymýšlej cenu.
+            - "Prodávají zde pivo a kolik stojí?" je query property, subject "pivo", predicate "availability_and_price".
+            - "Je tu ještě někdo kromě Matěje?" je query contents nebo exists_here podle formulace.
+            - "Mám ještě jiné věci?" je query inventory.
             - "Vezmu židli" je action take se subject "židle".
             - "Dám židli ke dveřím" je action put, subject "židle", target "dveře".
             - Pokud hráč výslovně říká účel jako "zablokuju dveře", dej args.purpose="block".
