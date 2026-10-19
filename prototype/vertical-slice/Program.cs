@@ -143,15 +143,21 @@ internal sealed class GameEngine
     private readonly GameStore _store;
     private readonly INarrativeRenderer _renderer;
     private readonly ISemanticInterpreter _interpreter;
+    private readonly WorldGraph _world;
 
     private string? _conversationTarget;
     private string? _focusSubject;
 
-    public GameEngine(GameStore store, INarrativeRenderer renderer, ISemanticInterpreter interpreter)
+    public GameEngine(
+        GameStore store,
+        INarrativeRenderer renderer,
+        ISemanticInterpreter interpreter,
+        WorldGraph world)
     {
         _store = store;
         _renderer = renderer;
         _interpreter = interpreter;
+        _world = world;
     }
 
     public void ResetContext()
@@ -174,8 +180,8 @@ internal sealed class GameEngine
                 state,
                 _conversationTarget,
                 _focusSubject,
-                WorldData.VisibleEntities(state.Location),
-                WorldData.KnownEntities(state));
+                _world.VisibleNames(state.Location),
+                _world.KnownNames());
 
         if (command is null || command.Kind == "unknown")
         {
@@ -228,6 +234,7 @@ internal sealed class GameEngine
             result.EventSummary);
 
         await _store.SaveAsync(state);
+        _world.SyncPlayerState(state);
 
         if (result.Contract is not null)
             await RenderAsync(result.Contract);
