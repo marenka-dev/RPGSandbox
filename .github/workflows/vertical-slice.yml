@@ -1,0 +1,27 @@
+name: Vertical slice
+
+on:
+  push:
+    paths:
+      - 'prototype/vertical-slice/**'
+      - '.github/workflows/vertical-slice.yml'
+  pull_request:
+    paths:
+      - 'prototype/vertical-slice/**'
+      - '.github/workflows/vertical-slice.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototype/vertical-slice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
