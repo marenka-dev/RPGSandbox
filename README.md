@@ -16,6 +16,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [Herní forma a uživatelské rozhraní](docs/gameplay-ui.md)
 - [Technická architektura – Local First](docs/technical-architecture.md)
 - [Sémantické akce a dotazy nad světem](docs/semantic-actions.md)
+- [Generování světa, World Graph a lazy concretization](docs/world-graph-and-concretization.md)
 - [RPG mechaniky](docs/rpg-mechanics.md)
 - [Simulace světa](docs/world-simulation.md)
 - [Znalostní model světa](docs/knowledge-model.md)
