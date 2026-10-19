@@ -1,4 +1,4 @@
-# RPGSandbox: lokální AI prototyp 0.5 – validovaný Scene Plan
+# RPGSandbox: lokální AI prototyp 0.6 – Engine Contract renderer
 
 Samostatná konzolová diagnostika českého vyprávění, rychlosti odpovědí a respektování kanonického stavu světa. Zatím **nejde o hru ani o skutečně dokončený simulační engine**. `engineResult` jsou předem připravené testovací výsledky, které budoucí engine předá AI. První běh vyžaduje .NET SDK 8 a pro skutečné AI odpovědi lokálně spuštěnou Ollamu s instalovaným kompatibilním modelem.
 
@@ -134,3 +134,38 @@ dotnet run -- --model aya-expanse:8b --report report-aya-v05.json
 ```
 
 Důležité: 0.5 používá dva AI požadavky na scénu, takže celková latence bude vyšší. Měříme zvlášť čas plánování a renderu. Pokud kvalita výrazně vzroste, později lze plánovací krok nahradit levnějším/malým modelem nebo část validace převést zcela do enginu.
+
+
+## Benchmark 0.6 – Engine Contract → renderer
+
+Výsledek 0.5 ukázal, že samostatný AI planner správně drží role, ale dělá práci, kterou už bude znát samotný herní engine. Verze 0.6 proto AI planner odstraňuje.
+
+Pipeline je nyní:
+
+**Engine Contract → AI renderer**
+
+Engine předává speaker, listener, perspective, kompletní kanonická fakta, přesně povolený flavor a zakázané skutečnosti. Renderer pouze vytvoří krátký český text.
+
+Renderer používá nižší temperature `0.18`, kratší výstup a explicitní pravidlo, že při nejistotě má detail vynechat.
+
+Spuštění:
+
+```powershell
+git pull
+cd prototype\local-ai
+dotnet run -- --mock
+dotnet run -- --model gemma3:12b --report report-gemma3-v06.json
+```
+
+Pro srovnání lze použít i jiné modely:
+
+```powershell
+dotnet run -- --model qwen3:8b --report report-qwen3-v06.json
+dotnet run -- --model aya-expanse:8b --report report-aya-v06.json
+```
+
+Hodnotíme zejména:
+- nulové nové osoby/předměty/události;
+- správné role a 2. osobu jednotného čísla;
+- přirozenou češtinu;
+- latenci, která už neobsahuje samostatný plánovací AI krok.
