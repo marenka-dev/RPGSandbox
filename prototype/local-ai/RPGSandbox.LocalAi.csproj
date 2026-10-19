@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <None Update="scenarios.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="scenarios*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
