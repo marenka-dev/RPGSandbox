@@ -1,6 +1,6 @@
-# RPGSandbox – Rabenfeld vertical slice v0.1
+# RPGSandbox – Rabenfeld vertical slice v0.2 Natural Input
 
-První souvislá hratelná konzolová smyčka. Už nejde o izolovaný AI benchmark.
+První souvislá hratelná konzolová smyčka s hybridní interpretací přirozeného českého vstupu.
 
 ## Co prototyp umí
 
@@ -9,13 +9,15 @@ První souvislá hratelná konzolová smyčka. Už nejde o izolovaný AI benchma
 - tři lokace: pokoj U Tří korun, společenská místnost hostince a rabenfeldské náměstí;
 - Matěje s jednoduchou perzistentní pamětí;
 - Havla a kanonickou cenu obilí 4 groše za míru;
-- jednoduchou deterministickou interpretaci českého vstupu;
+- **přímé systémové dotazy bez AI**: kde jsem, koho znám, kolik mám peněz, kolik je hodin;
+- **deterministický parser** pro běžné a bezpečně rozpoznatelné akce;
+- **Qwen3 8B jako fallback intent interpreter** pro volnější české formulace;
+- aktivní konverzační cíl pro přirozené navazování typu „Jak se máš?“;
 - Engine Contract pro každou přijatou akci;
-- lokální Gemma 3 12B přes Ollamu pouze jako renderer prózy;
-- fallback bez AI při nedostupné Ollamě;
+- **Gemma 3 12B pouze jako renderer prózy**;
 - historii přijatých akcí v tabulce `world_events`.
 
-Engine mění stav světa **před** narací. AI nikdy nezapisuje do SQLite a nemůže měnit kanonický výsledek.
+AI intent interpreter nikdy nerozhoduje výsledek akce. Vrací pouze návrh `intent + target`; engine ho validuje podle lokace a povolených akcí. Renderer nikdy nezapisuje do SQLite.
 
 ## Spuštění
 
@@ -24,35 +26,65 @@ Z kořene repozitáře:
 ```powershell
 cd prototype\vertical-slice
 dotnet restore
-dotnet run -- --model gemma3:12b
+dotnet run -- --model gemma3:12b --intent-model qwen3:8b
 ```
 
-Databáze se vytvoří jako `rabenfeld-v01.db` v aktuálním adresáři.
+Pokud oba modely už máš v Ollamě, není potřeba nic dalšího stahovat.
 
-Pro test bez AI:
+Databáze zůstává `rabenfeld-v01.db`, takže předchozí save lze dál použít.
+
+Jen bez intent AI:
+
+```powershell
+dotnet run -- --model gemma3:12b --no-intent-ai
+```
+
+Bez jakékoliv AI:
 
 ```powershell
 dotnet run -- --no-ai
 ```
 
-Pro nový začátek napiš ve hře `reset`.
-
-## Příklady vstupu
+## Přirozené příklady
 
 ```text
+kde jsem?
+koho znám?
+kolik mám peněz?
+podívám se po pokoji
 podívám se z okna
-sejdu dolů za Matějem
-poprosím Matěje o snídani a zeptám se, jestli je dnes rušno
-řeknu Matějovi, že dnes půjdu na trh a potom na radnici
-rozloučím se s Matějem
-půjdu na náměstí
-prohlédnu si trh
-zkusím Havla přesvědčit, aby mi prodal obilí za polovinu
-vrátím se do hostince
+sejdu dolů
+jak se máš?
+máš něco k jídlu?
+poprosím Matěje o snídani
+je dnes ve městě rušno?
+pozdravím Havla
+prohlédnu si Havla
+zkusím ho přesvědčit, aby mi prodal obilí za polovinu
 ```
 
-Příkazy `stav`, `pomoc`, `reset`, `konec` jsou systémové.
+Parser nejdřív použije rychlá bezpečná pravidla. Teprve pokud jim vstup neodpovídá, Qwen vrátí strukturovaný návrh akce. Pokud ani ten nejde bezpečně validovat, svět se vůbec nezmění.
 
-## Záměr v0.1
+## Architektonický princip v0.2
 
-Intent parser je úmyslně jednoduchý a deterministický. Další krok bude oddělit interpretaci libovolného vstupu od samotné simulace tak, aby i případná AI interpretace vracela pouze strukturovaný návrh akce, který engine validuje. Renderer zůstává oddělený a nikdy není autoritou nad stavem světa.
+**AI chápe jazyk. Engine chápe svět.**
+
+Pipeline:
+
+```text
+hráčův text
+  ↓
+přímý dotaz / deterministický parser
+  ↓ pokud nerozpozná
+Qwen intent interpreter → pouze JSON intent + target
+  ↓
+engine validace a kanonický výsledek
+  ↓
+Engine Contract
+  ↓
+Gemma renderer
+  ↓
+text hráči
+```
+
+Další krok bude vyhodnotit playtest v0.2, zejména přesnost volného vstupu, latenci fallback interpreteru a chování navazujících dialogů.
