@@ -204,6 +204,9 @@ internal sealed class GameEngine
             _conversationTarget = null;
         }
 
+        if (parsed.Intent == PlayerIntent.GoodbyeMatej)
+            _conversationTarget = null;
+
         if (resolution.SetMatejKnowsPlan)
             state.MatejKnowsPlan = true;
 
@@ -444,7 +447,8 @@ internal static class IntentParser
         if (TextNorm.ContainsAny(n, "snidan") && TextNorm.ContainsAny(n, "rus", "trzn", "mesto"))
             return new(PlayerIntent.BreakfastBusy, "Matěj", "deterministic");
 
-        if (TextNorm.ContainsAny(n, "poprosim o snidan", "dam si snidan", "chci snidan", "objednam snidan"))
+        if (TextNorm.ContainsAny(n, "snidan") &&
+            TextNorm.ContainsAny(n, "popros", "dam si", "chci", "objedn", "prines"))
             return new(PlayerIntent.OrderBreakfast, "Matěj", "deterministic");
 
         if (TextNorm.ContainsAny(n, "mas neco k jidlu", "mate neco k jidlu", "co mas k jidlu", "jidlo"))
