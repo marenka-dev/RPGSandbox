@@ -64,6 +64,7 @@ internal sealed class WorldGraph : IDisposable
         AddEntity("person.havel", "Person", "Havel", "seed");
         AddEntity("item.grain", "Commodity", "obilí", "seed");
         AddEntity("group.market.townspeople", "PopulationGroup", "měšťané na trhu", "macro");
+        AddEntity("group.inn.patrons", "PopulationGroup", "další hosté v hostinci", "macro");
         AddEntity("feature.market.stalls", "FeatureGroup", "tržní stánky", "macro");
         AddEntity("object.chair.room", "Object", "židle", "seed");
         AddEntity("object.door.room", "Object", "dveře", "seed");
@@ -87,6 +88,8 @@ internal sealed class WorldGraph : IDisposable
 
         AddFact("group.market.townspeople", "location", "loc.market");
         AddFact("group.market.townspeople", "population_kind", value: "generic_people");
+        AddFact("group.inn.patrons", "location", "loc.inn.common");
+        AddFact("group.inn.patrons", "population_kind", value: "generic_people");
         AddFact("feature.market.stalls", "location", "loc.market");
         AddFact("feature.market.stalls", "count_class", value: "multiple");
 
@@ -158,6 +161,7 @@ internal sealed class WorldGraph : IDisposable
         if (n.Contains("zidl")) return "object.chair.room";
         if (n.Contains("dver")) return "object.door.room";
         if (n.Contains("stan")) return "feature.market.stalls";
+        if (n.Contains("host") || n.Contains("nekdo dalsi")) return "group.inn.patrons";
         if (n.Contains("mestan") || n.Contains("lid")) return "group.market.townspeople";
 
         return FindEntityByNameContains(n);
@@ -321,11 +325,12 @@ internal sealed class WorldGraph : IDisposable
         if (location == LocationId.MarketSquare)
         {
             var npc = ConcretizeMarketNpc();
+            KnowEntity(npc);
             return $"Ano. Mezi dosud anonymními měšťany se nyní konkretizovala postava {EntityName(npc)}. Od této chvíle je persistentní součástí světa.";
         }
 
         if (location == LocationId.InnCommonRoom)
-            return "V této chvíli je ve společenské místnosti konkrétně evidován Matěj.";
+            return "Ano. Kromě Matěje je ve společenské místnosti evidována generická skupina dalších hostů; konkrétní osoba by se vytvořila až při skutečném kontaktu.";
 
         return "V aktuální lokaci není dostupná další osoba k seznámení.";
     }
