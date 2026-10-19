@@ -21,7 +21,7 @@ internal static class Program
         var reportPath = Option(args, "--report") ?? "local-ai-report.json";
         var isMock = args.Contains("--mock", StringComparer.OrdinalIgnoreCase);
         var enableThinking = args.Contains("--think", StringComparer.OrdinalIgnoreCase);
-        var scenarioPath = Option(args, "--scenarios") ?? Path.Combine(AppContext.BaseDirectory, "scenarios.json");
+        var scenarioPath = Option(args, "--scenarios") ?? Path.Combine(AppContext.BaseDirectory, "scenarios-czech-v03.json");
 
         if (!File.Exists(scenarioPath))
         {
@@ -48,12 +48,17 @@ internal static class Program
         {
             Console.WriteLine($"\n=== {scenario.Title} ===");
             var system = """
-                Jsi vypravěč narativní hry RPGSandbox. Odpovídej přirozenou, kvalitní češtinou.
-                Dostaneš pouze fakta, která smí daná postava v této scéně znát.
-                Nepřidávej nová potvrzená fakta ani neměň historii, inventář, stav světa či vztahy.
+                Jsi český vypravěč narativní hry RPGSandbox.
+                Piš přirozenou současnou češtinou, jako kvalitně lokalizované české RPG, nikoli jako doslovný překlad z angličtiny.
+                Vyprávění piš ve 2. osobě jednotného čísla ("vidíš", "slyšíš", "vycházíš"), pokud scéna není čistý dialog.
+                Dialogy mají odpovídat věku, povolání a povaze postavy. Běžní lidé nemluví básnicky ani vznešeně bez důvodu.
+                Vyhýbej se prázdným metaforám, patosu, klišé a podivným slovním spojením.
+                Dostaneš pouze fakta, která smí postava v této scéně znát.
+                Nepřidávej nové osoby, události, motivy, tajemství, předměty ani potvrzená fakta, která nejsou v kontextu nebo výsledku enginu.
+                Pokud NPC něco neví, nesmí ani nepřímo naznačit, že to existuje.
                 Nevysvětluj herní mechaniky, neprozrazuj čísla ani hody kostkou.
                 Výsledek akce určil herní engine; respektuj ho přesně.
-                Napiš krátký atmosférický dialog nebo popis (80–150 českých slov).
+                Piš stručně: obvykle 45–100 českých slov. Důležitější je přirozenost a přesnost než délka.
                 """;
 
             var prompt = $"""
