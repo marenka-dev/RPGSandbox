@@ -150,6 +150,7 @@ internal sealed class WorldGraph : IDisposable
         if (string.IsNullOrWhiteSpace(raw)) return null;
         var n = TextNorm.Normalize(raw);
 
+        if (n is "player" or "hrac" or "ja" or "já" || n.Contains("moje postava")) return "player";
         if (n.Contains("matej")) return "person.matej";
         if (n.Contains("havl") || n == "havel") return "person.havel";
         if (n.Contains("obil")) return "item.grain";
