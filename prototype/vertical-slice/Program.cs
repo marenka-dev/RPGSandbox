@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace RPGSandbox.VerticalSlice;
 
@@ -15,21 +14,21 @@ internal static class Program
         Console.OutputEncoding = Encoding.UTF8;
 
         var rendererModel = Option(args, "--model") ?? "gemma3:12b";
-        var intentModel = Option(args, "--intent-model") ?? "qwen3:8b";
+        var semanticModel = Option(args, "--intent-model") ?? "qwen3:8b";
         var ollamaUrl = Option(args, "--url") ?? "http://127.0.0.1:11434";
         var savePath = Option(args, "--save") ?? "rabenfeld-v01.db";
         var noAi = args.Contains("--no-ai", StringComparer.OrdinalIgnoreCase);
-        var noIntentAi = noAi || args.Contains("--no-intent-ai", StringComparer.OrdinalIgnoreCase);
+        var noSemanticAi = noAi || args.Contains("--no-intent-ai", StringComparer.OrdinalIgnoreCase);
 
         await using var store = new GameStore(savePath);
         await store.InitializeAsync();
         var state = await store.LoadOrCreateAsync();
 
         using var renderer = new OllamaRenderer(ollamaUrl, rendererModel, noAi);
-        using var interpreter = new OllamaIntentInterpreter(ollamaUrl, intentModel, noIntentAi);
+        using var interpreter = new OllamaSemanticInterpreter(ollamaUrl, semanticModel, noSemanticAi);
         var engine = new GameEngine(store, renderer, interpreter);
 
-        PrintHeader(rendererModel, intentModel, savePath, noAi, noIntentAi);
+        PrintHeader(rendererModel, semanticModel, savePath, noAi, noSemanticAi);
         await engine.RenderArrivalAsync(state);
 
         while (true)
@@ -48,8 +47,7 @@ internal static class Program
                 return;
             }
 
-            if (input.Equals("pomoc", StringComparison.OrdinalIgnoreCase) ||
-                input.Equals("help", StringComparison.OrdinalIgnoreCase))
+            if (input.Equals("pomoc", StringComparison.OrdinalIgnoreCase))
             {
                 PrintHelp();
                 continue;
@@ -65,7 +63,7 @@ internal static class Program
             {
                 state = WorldState.NewGame();
                 await store.ResetAsync(state);
-                engine.ResetConversation();
+                engine.ResetContext();
                 Console.WriteLine("Svět vertical slice byl resetován.");
                 await engine.RenderArrivalAsync(state);
                 continue;
@@ -77,38 +75,37 @@ internal static class Program
 
     private static void PrintHeader(
         string rendererModel,
-        string intentModel,
+        string semanticModel,
         string savePath,
         bool noAi,
-        bool noIntentAi)
+        bool noSemanticAi)
     {
-        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.2 Natural Input");
+        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.3 Semantic Actions");
         Console.WriteLine($"Vypravěč: {(noAi ? "fallback bez AI" : rendererModel)}");
-        Console.WriteLine($"Interpret vstupu: {(noIntentAi ? "jen deterministický parser" : intentModel)}");
+        Console.WriteLine($"Interpret významu: {(noSemanticAi ? "jen lokální rychlá pravidla" : semanticModel)}");
         Console.WriteLine($"Save: {Path.GetFullPath(savePath)}");
-        Console.WriteLine("Piš přirozeně česky. Engine nejdřív zkusí bezpečný parser a teprve potom AI interpretaci.");
+        Console.WriteLine("Napiš, co chceš udělat nebo zjistit. AI překládá jazyk, engine rozhoduje svět.");
     }
 
     private static void PrintHelp()
     {
         Console.WriteLine("""
-            Můžeš psát přirozeně, například:
+            Zkus psát přirozeně. Například:
               kde jsem?
               koho znám?
-              kolik mám peněz?
-              kolik je hodin?
-              podívám se po pokoji
-              podívám se z okna
-              sejdu dolů
-              jak se máš?
-              máš něco k jídlu?
-              poprosím o snídani
-              je dnes ve městě rušno?
-              půjdu na náměstí
-              pozdravím Havla
+              kde je Matěj?
+              jsou tu i další stánky?
+              půjdu za Havlem
               prohlédnu si Havla
-              zkusím ho přesvědčit, aby mi prodal obilí za polovinu
-              vrátím se do hostince
+              co prodáváš?
+              to je moc drahé
+              tak za 3?
+              půjdu za Matějem
+              můžu se s někým seznámit?
+              vezmu židli a dám ji ke dveřím
+
+            Poslední příklad může engine odmítnout, pokud pro něj ještě nemá
+            obecná fyzikální pravidla. Neměl by ale vyžadovat přesnou formulaci příkazu.
 
             Systém:
               stav
@@ -120,7 +117,7 @@ internal static class Program
     private static void PrintState(WorldState state)
     {
         Console.WriteLine($"Čas: {state.GameTime:dd.MM.yyyy HH:mm}");
-        Console.WriteLine($"Lokace: {LocationNames.Name(state.Location)}");
+        Console.WriteLine($"Lokace: {WorldData.LocationName(state.Location)}");
         Console.WriteLine($"Peníze: {state.MoneyGroats} grošů");
         Console.WriteLine($"Matěj zná plán trh → radnice: {(state.MatejKnowsPlan ? "ano" : "ne")}");
         Console.WriteLine($"Cena obilí u Havla: {state.GrainPriceGroats} groše/míra");
@@ -139,270 +136,412 @@ internal sealed class GameEngine
 {
     private readonly GameStore _store;
     private readonly INarrativeRenderer _renderer;
-    private readonly IIntentInterpreter _interpreter;
-    private string? _conversationTarget;
+    private readonly ISemanticInterpreter _interpreter;
 
-    public GameEngine(GameStore store, INarrativeRenderer renderer, IIntentInterpreter interpreter)
+    private string? _conversationTarget;
+    private string? _focusSubject;
+
+    public GameEngine(GameStore store, INarrativeRenderer renderer, ISemanticInterpreter interpreter)
     {
         _store = store;
         _renderer = renderer;
         _interpreter = interpreter;
     }
 
-    public void ResetConversation() => _conversationTarget = null;
+    public void ResetContext()
+    {
+        _conversationTarget = null;
+        _focusSubject = null;
+    }
 
     public async Task RenderArrivalAsync(WorldState state)
     {
-        var contract = state.Location switch
-        {
-            LocationId.InnRoom => SceneContracts.InnRoomArrival(state),
-            LocationId.InnCommonRoom => SceneContracts.InnCommonArrival(state),
-            LocationId.MarketSquare => SceneContracts.MarketArrival(state),
-            _ => SceneContracts.InnRoomArrival(state)
-        };
-
+        var contract = SceneContracts.Arrival(state);
         await RenderAsync(contract);
     }
 
     public async Task HandleAsync(WorldState state, string rawInput)
     {
-        if (TryHandleDirectQuestion(state, rawInput, out var directAnswer))
-        {
-            Console.WriteLine(directAnswer);
-            return;
-        }
-
-        var parsed = IntentParser.Parse(rawInput, state.Location, _conversationTarget);
-
-        if (parsed.Intent == PlayerIntent.Unknown)
-        {
-            var aiParsed = await _interpreter.InterpretAsync(
+        var command = FastSemanticParser.TryParse(rawInput, state, _conversationTarget, _focusSubject)
+            ?? await _interpreter.InterpretAsync(
                 rawInput,
                 state,
                 _conversationTarget,
-                AvailableTargets(state.Location));
+                _focusSubject,
+                WorldData.VisibleEntities(state.Location),
+                WorldData.KnownEntities(state));
 
-            if (aiParsed is not null)
-                parsed = aiParsed;
-        }
-
-        parsed = NormalizeImplicitTarget(parsed, state.Location, _conversationTarget);
-
-        var resolution = Resolve(state, parsed, rawInput);
-
-        if (!resolution.Accepted)
+        if (command is null || command.Kind == "unknown")
         {
-            Console.WriteLine(resolution.SystemMessage);
+            Console.WriteLine("Význam vstupu se nepodařilo bezpečně určit. Svět se nezměnil.");
             return;
         }
 
-        state.GameTime = state.GameTime.AddMinutes(resolution.Minutes);
-
-        if (resolution.NewLocation is not null)
+        var validation = SemanticValidator.Validate(command, state);
+        if (!validation.IsValid)
         {
-            state.Location = resolution.NewLocation.Value;
-            _conversationTarget = null;
+            Console.WriteLine(validation.Message);
+            return;
         }
 
-        if (parsed.Intent == PlayerIntent.GoodbyeMatej)
-            _conversationTarget = null;
+        var result = Resolve(state, command, rawInput);
+        if (!result.Accepted)
+        {
+            Console.WriteLine(result.SystemMessage);
+            return;
+        }
 
-        if (resolution.SetMatejKnowsPlan)
+        if (result.DirectAnswer is not null)
+        {
+            Console.WriteLine(result.DirectAnswer);
+            return;
+        }
+
+        state.GameTime = state.GameTime.AddMinutes(result.Minutes);
+
+        if (result.NewLocation is not null)
+        {
+            state.Location = result.NewLocation.Value;
+            _conversationTarget = null;
+            _focusSubject = null;
+        }
+
+        if (result.SetMatejKnowsPlan)
             state.MatejKnowsPlan = true;
 
-        if (resolution.ConversationTarget is not null)
-            _conversationTarget = resolution.ConversationTarget;
+        if (result.ConversationTarget is not null)
+            _conversationTarget = result.ConversationTarget;
+
+        if (result.FocusSubject is not null)
+            _focusSubject = result.FocusSubject;
 
         await _store.AppendEventAsync(
             state.GameTime,
-            parsed.Intent.ToString(),
+            $"{command.Kind}:{command.Op}",
             rawInput,
-            resolution.EventSummary);
+            result.EventSummary);
 
         await _store.SaveAsync(state);
 
-        if (resolution.Contract is not null)
-            await RenderAsync(resolution.Contract);
+        if (result.Contract is not null)
+            await RenderAsync(result.Contract);
     }
 
-    private static bool TryHandleDirectQuestion(WorldState state, string rawInput, out string answer)
+    private EngineResult Resolve(WorldState state, SemanticCommand command, string rawInput)
     {
-        var n = TextNorm.Normalize(rawInput);
-
-        if (TextNorm.ContainsAny(n, "kde jsem", "kde se nachazim", "kde ted jsem"))
+        return command.Kind switch
         {
-            answer = $"Jsi v lokaci: {LocationNames.Name(state.Location)}.";
-            return true;
-        }
-
-        if (TextNorm.ContainsAny(n, "kolik mam penez", "kolik mam gros", "penize mam", "stav penez"))
-        {
-            answer = $"Máš {state.MoneyGroats} grošů.";
-            return true;
-        }
-
-        if (TextNorm.ContainsAny(n, "kolik je hodin", "kolik je", "jaky je cas", "cas je"))
-        {
-            answer = $"Je {state.GameTime:HH:mm}, {state.GameTime:dd.MM.yyyy}.";
-            return true;
-        }
-
-        if (TextNorm.ContainsAny(n, "koho znam", "jake lidi znam", "kdo je znamy"))
-        {
-            answer = state.Location == LocationId.MarketSquare
-                ? "Z relevantních lidí znáš Matěje, hostinského U Tří korun. Na trhu právě vidíš kupce Havla."
-                : "Z relevantních lidí znáš Matěje, hostinského U Tří korun.";
-            return true;
-        }
-
-        answer = "";
-        return false;
-    }
-
-    private Resolution Resolve(WorldState state, ParsedIntent parsed, string rawInput)
-    {
-        var intent = parsed.Intent;
-        var target = parsed.Target;
-
-        return intent switch
-        {
-            PlayerIntent.LookRoom when state.Location == LocationId.InnRoom =>
-                Resolution.Ok(2, null, SceneContracts.LookRoom(state),
-                    "Pavel si prohlédl pokoj."),
-
-            PlayerIntent.LookWindow when state.Location == LocationId.InnRoom =>
-                Resolution.Ok(3, null, SceneContracts.LookFromWindow(state),
-                    "Pavel se díval z okna na Rabenfeld."),
-
-            PlayerIntent.LookAround => ResolveLook(state),
-
-            PlayerIntent.InspectMatej when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(1, null, SceneContracts.InspectMatej(state),
-                    "Pavel si prohlédl Matěje.", conversationTarget: "Matěj"),
-
-            PlayerIntent.InspectHavel when state.Location == LocationId.MarketSquare =>
-                Resolution.Ok(1, null, SceneContracts.InspectHavel(state),
-                    "Pavel si prohlédl Havla.", conversationTarget: "Havel"),
-
-            PlayerIntent.GoDownstairs when state.Location == LocationId.InnRoom =>
-                Resolution.Ok(2, LocationId.InnCommonRoom, SceneContracts.GoDownstairs(state),
-                    "Pavel sešel z pokoje do společenské místnosti hostince."),
-
-            PlayerIntent.GoSquare when state.Location is LocationId.InnRoom or LocationId.InnCommonRoom =>
-                Resolution.Ok(5, LocationId.MarketSquare, SceneContracts.GoSquare(state),
-                    "Pavel odešel z hostince na rabenfeldské náměstí."),
-
-            PlayerIntent.GoInn when state.Location == LocationId.MarketSquare =>
-                Resolution.Ok(5, LocationId.InnCommonRoom, SceneContracts.GoInn(state),
-                    "Pavel se vrátil z náměstí do hostince U Tří korun."),
-
-            PlayerIntent.OrderBreakfast when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(4, null, SceneContracts.OrderBreakfast(state),
-                    "Matěj přinesl Pavlovi snídani.", conversationTarget: "Matěj"),
-
-            PlayerIntent.AskBusy when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(1, null, SceneContracts.AskBusy(state),
-                    "Matěj řekl Pavlovi, že je tržní den a náměstí bývá rušnější.",
-                    conversationTarget: "Matěj"),
-
-            PlayerIntent.BreakfastBusy when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(5, null, SceneContracts.BreakfastBusy(state),
-                    "Matěj přinesl Pavlovi snídani a řekl, že je tržní den a náměstí bývá rušnější.",
-                    conversationTarget: "Matěj"),
-
-            PlayerIntent.AskHowAreYou when state.Location == LocationId.InnCommonRoom && target == "Matěj" =>
-                Resolution.Ok(1, null, SceneContracts.AskHowMatej(state),
-                    "Pavel se Matěje zeptal, jak se má.", conversationTarget: "Matěj"),
-
-            PlayerIntent.AskFood when state.Location == LocationId.InnCommonRoom && target == "Matěj" =>
-                Resolution.Ok(1, null, SceneContracts.AskFood(state),
-                    "Pavel se Matěje zeptal, zda má něco k jídlu.", conversationTarget: "Matěj"),
-
-            PlayerIntent.AskSecret when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(2, null, SceneContracts.AskSecret(state),
-                    "Matěj nepotvrdil údajnou tajnou dohodu; nic spolehlivého o ní neví.",
-                    conversationTarget: "Matěj"),
-
-            PlayerIntent.TellPlan when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(2, null, SceneContracts.TellPlan(state),
-                    "Pavel řekl Matějovi, že chce jít na trh a potom na radnici.",
-                    true, "Matěj"),
-
-            PlayerIntent.GoodbyeMatej when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(1, null, SceneContracts.GoodbyeMatej(state),
-                    "Pavel se rozloučil s Matějem.", conversationTarget: null),
-
-            PlayerIntent.GreetMatej when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(1, null, SceneContracts.GreetMatej(state),
-                    "Pavel pozdravil Matěje.", conversationTarget: "Matěj"),
-
-            PlayerIntent.GreetHavel when state.Location == LocationId.MarketSquare =>
-                Resolution.Ok(1, null, SceneContracts.GreetHavel(state),
-                    "Pavel pozdravil Havla.", conversationTarget: "Havel"),
-
-            PlayerIntent.BargainHalf when state.Location == LocationId.MarketSquare =>
-                Resolution.Ok(3, null, SceneContracts.BargainFailure(state),
-                    "Pavel neuspěl při pokusu koupit obilí od Havla za polovinu ceny.",
-                    conversationTarget: "Havel"),
-
-            PlayerIntent.TalkMatej when state.Location == LocationId.InnCommonRoom =>
-                Resolution.Ok(1, null, SceneContracts.TalkMatej(state),
-                    "Pavel oslovil Matěje.", conversationTarget: "Matěj"),
-
-            PlayerIntent.TalkHavel when state.Location == LocationId.MarketSquare =>
-                Resolution.Ok(1, null, SceneContracts.TalkHavel(state),
-                    "Pavel oslovil kupce Havla.", conversationTarget: "Havel"),
-
-            _ => Resolution.Reject(SuggestionFor(state.Location, rawInput))
+            "query" => ResolveQuery(state, command),
+            "action" => ResolveAction(state, command, rawInput),
+            _ => EngineResult.Reject("Neznámý typ příkazu. Svět se nezměnil.")
         };
     }
 
-    private static ParsedIntent NormalizeImplicitTarget(
-        ParsedIntent parsed,
-        LocationId location,
-        string? conversationTarget)
+    private EngineResult ResolveQuery(WorldState state, SemanticCommand command)
     {
-        if (!string.IsNullOrWhiteSpace(parsed.Target))
-            return parsed;
+        var op = command.Op;
+        var subject = WorldData.CanonicalEntity(command.Subject ?? command.Target);
 
-        var target = conversationTarget;
-
-        if (target is null)
+        return op switch
         {
-            if (location == LocationId.InnCommonRoom)
-                target = "Matěj";
-            else if (location == LocationId.MarketSquare)
-                target = "Havel";
+            "current_location" =>
+                EngineResult.Answer($"Jsi v lokaci: {WorldData.LocationName(state.Location)}."),
+
+            "time" =>
+                EngineResult.Answer($"Je {state.GameTime:HH:mm}, {state.GameTime:dd.MM.yyyy}."),
+
+            "money" =>
+                EngineResult.Answer($"Máš {state.MoneyGroats} grošů."),
+
+            "known_people" =>
+                EngineResult.Answer("Z lidí, které skutečně znáš, je pro tento prototyp evidován Matěj, hostinský U Tří korun."),
+
+            "visible_people" =>
+                EngineResult.Answer(WorldData.VisiblePeopleAnswer(state.Location)),
+
+            "location_of" when subject is not null =>
+                ResolveLocationQuery(state, subject),
+
+            "exists_here" =>
+                ResolveExistsHere(state, command),
+
+            "property" when subject is not null =>
+                ResolvePropertyQuery(state, subject, command.Predicate),
+
+            "available_social_contact" =>
+                EngineResult.Answer(WorldData.AvailableSocialContactAnswer(state.Location)),
+
+            _ =>
+                EngineResult.Answer("Na takto položený dotaz zatím engine nemá ve svém znalostním modelu spolehlivou odpověď.")
+        };
+    }
+
+    private static EngineResult ResolveLocationQuery(WorldState state, string subject)
+    {
+        var knownLocation = WorldData.KnownLocationOf(subject, state);
+        if (knownLocation is null)
+            return EngineResult.Answer($"Nevíš spolehlivě, kde se {WorldData.DisplayName(subject)} právě nachází.");
+
+        return EngineResult.Answer(
+            $"{WorldData.DisplayName(subject)} je podle tvých aktuálních znalostí v lokaci: {WorldData.LocationName(knownLocation.Value)}.");
+    }
+
+    private static EngineResult ResolveExistsHere(WorldState state, SemanticCommand command)
+    {
+        var subject = TextNorm.Normalize(command.Subject ?? "");
+        if (subject.Contains("stan"))
+        {
+            return state.Location == LocationId.MarketSquare
+                ? EngineResult.Answer("Ano. Na náměstí je více tržních stánků, ale většinu z nich zatím nerozlišuješ jako samostatná známá místa.")
+                : EngineResult.Answer("V této lokaci žádné tržní stánky evidované nemáš.");
         }
 
-        return parsed with { Target = target };
+        if (subject.Contains("lid") || subject.Contains("nekdo") || subject.Contains("osob"))
+            return EngineResult.Answer(WorldData.AvailableSocialContactAnswer(state.Location));
+
+        return EngineResult.Answer("Z dostupných znalostí to nedokážeš určit.");
     }
 
-    private static List<string> AvailableTargets(LocationId location) => location switch
+    private static EngineResult ResolvePropertyQuery(
+        WorldState state,
+        string subject,
+        string? predicate)
     {
-        LocationId.InnCommonRoom => ["Matěj"],
-        LocationId.MarketSquare => ["Havel"],
-        _ => []
-    };
+        var p = TextNorm.Normalize(predicate ?? "");
 
-    private static Resolution ResolveLook(WorldState state)
+        if (subject == "Havel" && (p.Contains("prodav") || p.Contains("zboz") || p.Contains("cena")))
+            return EngineResult.Answer($"Havel prodává obilí za {state.GrainPriceGroats} groše za míru.");
+
+        if (subject == "Matěj" && (p.Contains("povol") || p.Contains("prace")))
+            return EngineResult.Answer("Matěj je hostinský U Tří korun.");
+
+        return EngineResult.Answer("Tuto vlastnost zatím ze svých znalostí spolehlivě neznáš.");
+    }
+
+    private EngineResult ResolveAction(WorldState state, SemanticCommand command, string rawInput)
     {
-        var contract = state.Location switch
+        var target = WorldData.CanonicalEntity(command.Target);
+        var subject = WorldData.CanonicalSubject(command.Subject ?? _focusSubject);
+
+        return command.Op switch
         {
-            LocationId.InnRoom => SceneContracts.LookRoom(state),
-            LocationId.InnCommonRoom => SceneContracts.LookInn(state),
-            LocationId.MarketSquare => SceneContracts.LookMarket(state),
-            _ => SceneContracts.LookRoom(state)
+            "observe" => ResolveObserve(state, command),
+            "inspect" => ResolveInspect(state, target),
+            "move_to" => ResolveMoveTo(state, target ?? command.Target),
+            "approach" => ResolveApproach(state, target),
+            "speak" => ResolveSpeak(state, target, command),
+            "ask" => ResolveAsk(state, target, command),
+            "tell" => ResolveTell(state, target, command),
+            "request" => ResolveRequest(state, target, subject, command),
+            "offer" => ResolveOffer(state, target, subject, command),
+            "wait" => ResolveWait(state, command),
+            _ => EngineResult.Reject(
+                $"Engine rozumí významu „{command.Op}“, ale zatím pro tuto obecnou operaci nemá pravidla. Svět se nezměnil.")
         };
-
-        return Resolution.Ok(2, null, contract, $"Pavel se rozhlédl v lokaci {state.Location}.");
     }
 
-    private static string SuggestionFor(LocationId location, string rawInput)
+    private static EngineResult ResolveObserve(WorldState state, SemanticCommand command)
     {
-        var where = LocationNames.Name(location);
-        return $"Akci „{rawInput}“ se zatím nepodařilo bezpečně převést na povolenou herní akci v lokaci {where}. " +
-               "Svět se nezměnil.";
+        var subject = TextNorm.Normalize(command.Subject ?? "");
+        var contract = subject.Contains("okn")
+            ? SceneContracts.LookFromWindow(state)
+            : subject.Contains("pokoj")
+                ? SceneContracts.LookRoom(state)
+                : SceneContracts.LookAround(state);
+
+        return EngineResult.Ok(
+            2, null, contract, "Pavel pozoroval své okolí.",
+            focusSubject: command.Subject);
+    }
+
+    private static EngineResult ResolveInspect(WorldState state, string? target)
+    {
+        if (target == "Havel" && state.Location == LocationId.MarketSquare)
+            return EngineResult.Ok(
+                1, null, SceneContracts.InspectHavel(state),
+                "Pavel si prohlédl Havla.", "Havel", "obilí");
+
+        if (target == "Matěj" && state.Location == LocationId.InnCommonRoom)
+            return EngineResult.Ok(
+                1, null, SceneContracts.InspectMatej(state),
+                "Pavel si prohlédl Matěje.", "Matěj");
+
+        return EngineResult.Reject("Cíl si teď nemůžeš bezpečně prohlédnout z aktuální lokace.");
+    }
+
+    private static EngineResult ResolveMoveTo(WorldState state, string? target)
+    {
+        var location = WorldData.ResolveDestination(target, state);
+        if (location is null)
+            return EngineResult.Reject("Nevíš, kam přesně by tato cesta měla vést.");
+
+        if (location == state.Location)
+        {
+            var person = WorldData.CanonicalEntity(target);
+            if (person is not null)
+                return ResolveApproach(state, person);
+            return EngineResult.Answer("Už na tom místě jsi.");
+        }
+
+        var minutes = WorldData.TravelMinutes(state.Location, location.Value);
+        return EngineResult.Ok(
+            minutes,
+            location,
+            SceneContracts.Move(state, location.Value),
+            $"Pavel se přesunul do lokace {WorldData.LocationName(location.Value)}.");
+    }
+
+    private static EngineResult ResolveApproach(WorldState state, string? target)
+    {
+        if (target is null || !WorldData.IsVisible(target, state.Location))
+            return EngineResult.Reject("Tuto osobu teď v aktuální lokaci nevidíš.");
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.Approach(state, target),
+            $"Pavel přistoupil k osobě {target}.",
+            target,
+            target == "Havel" ? "obilí" : null);
+    }
+
+    private static EngineResult ResolveSpeak(
+        WorldState state,
+        string? target,
+        SemanticCommand command)
+    {
+        target ??= WorldData.DefaultConversationTarget(state.Location);
+        if (target is null || !WorldData.IsVisible(target, state.Location))
+            return EngineResult.Reject("Nemáš tu nikoho odpovídajícího, ke komu bys mohl právě promluvit.");
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.Speak(state, target, command.Text),
+            $"Pavel promluvil k osobě {target}.",
+            target,
+            target == "Havel" ? "obilí" : null);
+    }
+
+    private static EngineResult ResolveAsk(
+        WorldState state,
+        string? target,
+        SemanticCommand command)
+    {
+        target ??= WorldData.DefaultConversationTarget(state.Location);
+        if (target is null || !WorldData.IsVisible(target, state.Location))
+            return EngineResult.Reject("Adresát otázky není v aktuální lokaci dostupný.");
+
+        var topic = command.Subject ?? command.Predicate ?? command.Text ?? "";
+        var knowledge = NpcKnowledge.Answer(target, topic, state);
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.NpcAnswer(state, target, topic, knowledge),
+            $"Pavel položil osobě {target} otázku na téma {topic}.",
+            target,
+            knowledge.FocusSubject);
+    }
+
+    private static EngineResult ResolveTell(
+        WorldState state,
+        string? target,
+        SemanticCommand command)
+    {
+        target ??= WorldData.DefaultConversationTarget(state.Location);
+        if (target is null || !WorldData.IsVisible(target, state.Location))
+            return EngineResult.Reject("Adresát sdělení není v aktuální lokaci dostupný.");
+
+        var text = command.Text ?? command.Subject ?? "";
+        var setPlan = target == "Matěj" &&
+                      TextNorm.Normalize(text).Contains("trh") &&
+                      TextNorm.Normalize(text).Contains("radnic");
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.Tell(state, target, text, setPlan),
+            $"Pavel něco sdělil osobě {target}.",
+            target,
+            null,
+            setPlan);
+    }
+
+    private static EngineResult ResolveRequest(
+        WorldState state,
+        string? target,
+        string? subject,
+        SemanticCommand command)
+    {
+        target ??= WorldData.DefaultConversationTarget(state.Location);
+
+        if (target == "Matěj" && state.Location == LocationId.InnCommonRoom &&
+            TextNorm.Normalize(subject ?? command.Text ?? "").Contains("snidan"))
+        {
+            return EngineResult.Ok(
+                4,
+                null,
+                SceneContracts.Breakfast(state),
+                "Matěj přinesl Pavlovi snídani.",
+                "Matěj",
+                "snídaně");
+        }
+
+        return EngineResult.Reject("Požadavek je srozumitelný, ale engine pro něj zatím nemá obecné pravidlo v této situaci.");
+    }
+
+    private static EngineResult ResolveOffer(
+        WorldState state,
+        string? target,
+        string? subject,
+        SemanticCommand command)
+    {
+        target ??= WorldData.DefaultConversationTarget(state.Location);
+
+        if (target != "Havel" || state.Location != LocationId.MarketSquare)
+            return EngineResult.Reject("Tuto nabídku teď nemáš komu platně předložit.");
+
+        if (!TextNorm.Normalize(subject ?? "").Contains("obil"))
+            return EngineResult.Reject("Engine nerozpoznal, čeho se nabídka týká.");
+
+        if (!command.Args.TryGetValue("price", out var rawPrice) ||
+            !int.TryParse(rawPrice, NumberStyles.Integer, CultureInfo.InvariantCulture, out var offeredPrice))
+        {
+            return EngineResult.Ok(
+                1,
+                null,
+                SceneContracts.AskForBetterPrice(state),
+                "Pavel naznačil Havlovi, že chce jednat o ceně obilí.",
+                "Havel",
+                "obilí");
+        }
+
+        var accepted = offeredPrice >= state.GrainPriceGroats;
+
+        return EngineResult.Ok(
+            2,
+            null,
+            SceneContracts.PriceOffer(state, offeredPrice, accepted),
+            accepted
+                ? $"Havel přijal nabídnutou cenu {offeredPrice} grošů za míru."
+                : $"Havel odmítl nabídnutou cenu {offeredPrice} grošů za míru.",
+            "Havel",
+            "obilí");
+    }
+
+    private static EngineResult ResolveWait(WorldState state, SemanticCommand command)
+    {
+        var minutes = 5;
+        if (command.Args.TryGetValue("minutes", out var raw) &&
+            int.TryParse(raw, out var parsed))
+            minutes = Math.Clamp(parsed, 1, 120);
+
+        return EngineResult.Ok(
+            minutes,
+            null,
+            SceneContracts.Wait(state, minutes),
+            $"Pavel čekal {minutes} minut.");
     }
 
     private async Task RenderAsync(SceneContract contract)
@@ -416,106 +555,105 @@ internal sealed class GameEngine
     }
 }
 
-internal static class IntentParser
+internal static class FastSemanticParser
 {
-    public static ParsedIntent Parse(string input, LocationId location, string? conversationTarget)
+    public static SemanticCommand? TryParse(
+        string input,
+        WorldState state,
+        string? conversationTarget,
+        string? focusSubject)
     {
         var n = TextNorm.Normalize(input);
 
-        if (location == LocationId.InnRoom &&
-            TextNorm.ContainsAny(n, "po pokoji", "pokoj", "mistnost") &&
-            TextNorm.ContainsAny(n, "podiv", "prohl", "rozhl"))
-            return new(PlayerIntent.LookRoom, null, "deterministic");
+        if (TextNorm.ContainsAny(n, "kde jsem", "kde se nachazim"))
+            return SemanticCommand.Query("current_location");
 
-        if (location == LocationId.InnRoom &&
-            TextNorm.ContainsAny(n, "z okna", "oknem", "ven z okna"))
-            return new(PlayerIntent.LookWindow, null, "deterministic");
+        if (TextNorm.ContainsAny(n, "kolik je hodin", "jaky je cas"))
+            return SemanticCommand.Query("time");
 
-        if (location == LocationId.MarketSquare &&
-            TextNorm.ContainsAny(n, "prohl", "podiv") &&
-            TextNorm.ContainsAny(n, "havel", "havla", "ho"))
-            return new(PlayerIntent.InspectHavel, "Havel", "deterministic");
+        if (TextNorm.ContainsAny(n, "kolik mam penez", "kolik mam gros"))
+            return SemanticCommand.Query("money");
 
-        if (location == LocationId.InnCommonRoom &&
-            TextNorm.ContainsAny(n, "prohl", "podiv") &&
-            TextNorm.ContainsAny(n, "matej", "mateje", "ho"))
-            return new(PlayerIntent.InspectMatej, "Matěj", "deterministic");
+        if (TextNorm.ContainsAny(n, "koho znam"))
+            return SemanticCommand.Query("known_people");
 
-        if (TextNorm.ContainsAny(n, "tajnou dohod", "tajne dohod", "dohod rady", "dohodu rady"))
-            return new(PlayerIntent.AskSecret, "Matěj", "deterministic");
+        if (n.StartsWith("kde je "))
+            return SemanticCommand.Query("location_of", subject: input[7..].Trim(' ', '?', '.', '!'));
 
-        if (TextNorm.ContainsAny(n, "snidan") && TextNorm.ContainsAny(n, "rus", "trzn", "mesto"))
-            return new(PlayerIntent.BreakfastBusy, "Matěj", "deterministic");
+        if (TextNorm.ContainsAny(n, "jsou tu i dalsi stanky", "jsou tu dalsi stanky"))
+            return SemanticCommand.Query("exists_here", subject: "stánky");
 
-        if (TextNorm.ContainsAny(n, "snidan") &&
-            TextNorm.ContainsAny(n, "popros", "dam si", "chci", "objedn", "prines"))
-            return new(PlayerIntent.OrderBreakfast, "Matěj", "deterministic");
+        if (TextNorm.ContainsAny(n, "muzu se s nekym seznamit", "je tu nekdo koho neznam"))
+            return SemanticCommand.Query("available_social_contact");
 
-        if (TextNorm.ContainsAny(n, "mas neco k jidlu", "mate neco k jidlu", "co mas k jidlu", "jidlo"))
-            return new(PlayerIntent.AskFood, conversationTarget, "deterministic");
+        if (TextNorm.ContainsAny(n, "pujdu za ", "jdu za ", "dojdu za "))
+        {
+            var target = ExtractAfter(input, "za ");
+            return SemanticCommand.Action("move_to", target: target);
+        }
 
-        if (TextNorm.ContainsAny(n, "jak se mas", "jak se vam dari", "jak se dari"))
-            return new(PlayerIntent.AskHowAreYou, conversationTarget, "deterministic");
+        if (TextNorm.ContainsAny(n, "prohlidnu si", "prohlednu si", "podivam se na"))
+        {
+            var target = GuessTarget(input);
+            if (target is not null)
+                return SemanticCommand.Action("inspect", target: target);
+        }
 
-        if (TextNorm.ContainsAny(n, "je dnes", "dnes je") &&
-            TextNorm.ContainsAny(n, "rus", "trzn", "namesti"))
-            return new(PlayerIntent.AskBusy, "Matěj", "deterministic");
+        if (TextNorm.ContainsAny(n, "promluvim s", "oslovim", "pozdravim"))
+        {
+            var target = GuessTarget(input) ?? conversationTarget;
+            return SemanticCommand.Action("speak", target: target, text: input);
+        }
 
-        if (TextNorm.ContainsAny(n, "reknu matej", "povim matej", "planuju") &&
-            TextNorm.ContainsAny(n, "trh") && TextNorm.ContainsAny(n, "radnic"))
-            return new(PlayerIntent.TellPlan, "Matěj", "deterministic");
+        if (TextNorm.ContainsAny(n, "poprosim", "pozadam") && n.Contains("snidan"))
+            return SemanticCommand.Action("request", target: conversationTarget ?? "Matěj", subject: "snídaně");
 
-        if (TextNorm.ContainsAny(n, "rozlouc", "sbohem", "mej se") && location == LocationId.InnCommonRoom)
-            return new(PlayerIntent.GoodbyeMatej, "Matěj", "deterministic");
+        if (conversationTarget == "Havel" && focusSubject == "obilí")
+        {
+            var price = ExtractStandaloneNumber(n);
+            if (price is not null && TextNorm.ContainsAny(n, "za ", "tak za", "dam", "nabid"))
+                return SemanticCommand.Action(
+                    "offer", target: "Havel", subject: "obilí",
+                    args: new Dictionary<string, string> { ["price"] = price.Value.ToString(CultureInfo.InvariantCulture) });
 
-        if (TextNorm.ContainsAny(n, "pozdrav", "ahoj", "dobry den") &&
-            TextNorm.ContainsAny(n, "havel", "havla") && location == LocationId.MarketSquare)
-            return new(PlayerIntent.GreetHavel, "Havel", "deterministic");
+            if (TextNorm.ContainsAny(n, "drahe", "moc stoji", "sleva", "slevit"))
+                return SemanticCommand.Action("offer", target: "Havel", subject: "obilí");
+        }
 
-        if (TextNorm.ContainsAny(n, "pozdrav", "ahoj", "dobry den") &&
-            TextNorm.ContainsAny(n, "matej", "mateje") && location == LocationId.InnCommonRoom)
-            return new(PlayerIntent.GreetMatej, "Matěj", "deterministic");
+        return null;
+    }
 
-        if (TextNorm.ContainsAny(n, "polovin", "pulku", "slev") &&
-            TextNorm.ContainsAny(n, "obil", "havel", "ho") &&
-            location == LocationId.MarketSquare)
-            return new(PlayerIntent.BargainHalf, "Havel", "deterministic");
+    private static string? GuessTarget(string input)
+    {
+        var n = TextNorm.Normalize(input);
+        if (n.Contains("havel")) return "Havel";
+        if (n.Contains("matej")) return "Matěj";
+        return null;
+    }
 
-        if (TextNorm.ContainsAny(n, "namesti", "trh", "ven") &&
-            TextNorm.ContainsAny(n, "jdu", "pujdu", "vyjdu", "odejdu"))
-            return new(PlayerIntent.GoSquare, null, "deterministic");
+    private static string ExtractAfter(string input, string marker)
+    {
+        var index = TextNorm.Normalize(input).IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0) return input;
+        return input[(index + marker.Length)..].Trim(' ', '.', '?', '!');
+    }
 
-        if (TextNorm.ContainsAny(n, "hostinc", "tri korun", "zpet") &&
-            TextNorm.ContainsAny(n, "jdu", "vratim", "pujdu"))
-            return new(PlayerIntent.GoInn, null, "deterministic");
-
-        if (TextNorm.ContainsAny(n, "dolu", "matej") &&
-            TextNorm.ContainsAny(n, "sejdu", "jdu", "pujdu") &&
-            location == LocationId.InnRoom)
-            return new(PlayerIntent.GoDownstairs, null, "deterministic");
-
-        if (TextNorm.ContainsAny(n, "matej") &&
-            TextNorm.ContainsAny(n, "mluv", "oslov", "zept", "promluv"))
-            return new(PlayerIntent.TalkMatej, "Matěj", "deterministic");
-
-        if (TextNorm.ContainsAny(n, "havel") &&
-            TextNorm.ContainsAny(n, "mluv", "oslov", "zept", "promluv"))
-            return new(PlayerIntent.TalkHavel, "Havel", "deterministic");
-
-        if (TextNorm.ContainsAny(n, "rozhl", "pozoru", "prohlid", "koukam"))
-            return new(PlayerIntent.LookAround, null, "deterministic");
-
-        return new(PlayerIntent.Unknown, null, "none");
+    private static int? ExtractStandaloneNumber(string n)
+    {
+        foreach (var part in n.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (int.TryParse(part.Trim('?', '!', '.', ','), out var value))
+                return value;
+        return null;
     }
 }
 
-internal sealed class OllamaIntentInterpreter : IIntentInterpreter, IDisposable
+internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposable
 {
     private readonly HttpClient _client;
     private readonly string _model;
     private readonly bool _disabled;
 
-    public OllamaIntentInterpreter(string baseUrl, string model, bool disabled)
+    public OllamaSemanticInterpreter(string baseUrl, string model, bool disabled)
     {
         _model = model;
         _disabled = disabled;
@@ -526,41 +664,58 @@ internal sealed class OllamaIntentInterpreter : IIntentInterpreter, IDisposable
         };
     }
 
-    public async Task<ParsedIntent?> InterpretAsync(
+    public async Task<SemanticCommand?> InterpretAsync(
         string input,
         WorldState state,
         string? conversationTarget,
-        List<string> availableTargets)
+        string? focusSubject,
+        List<string> visibleEntities,
+        List<string> knownEntities)
     {
         if (_disabled)
             return null;
 
-        var allowed = new[]
-        {
-            "LookAround", "LookRoom", "LookWindow", "InspectMatej", "InspectHavel",
-            "GoDownstairs", "GoSquare", "GoInn", "TalkMatej", "TalkHavel",
-            "GreetMatej", "GreetHavel", "AskHowAreYou", "AskFood", "OrderBreakfast",
-            "AskBusy", "BreakfastBusy", "AskSecret", "TellPlan", "GoodbyeMatej",
-            "BargainHalf", "Unknown"
-        };
-
         var system = """
-            Jsi pouze interpret hráčova českého vstupu pro RPGSandbox.
-            Nerozhoduješ výsledek akce a nesmíš měnit svět.
-            Vrať POUZE validní JSON bez markdownu:
-            {"intent":"NazevIntentu","target":"Matěj|Havel|null"}
+            Jsi sémantický překladač vstupu hráče pro sandbox RPG.
+            NEROZHODUJEŠ, co se ve světě stane. Pouze přeložíš českou větu do obecného významu.
 
-            Použij pouze intent ze seznamu ALLOWED INTENTS.
-            Target může být pouze osoba z AVAILABLE TARGETS nebo null.
-            Zájmena jako "ho", "mu", "tebe" řeš podle CURRENT CONVERSATION, pokud existuje.
-            Pokud si nejsi jistý nebo akce neodpovídá povolenému intentu, vrať Unknown.
+            Vrať pouze JSON:
+            {
+              "kind":"action|query|unknown",
+              "op":"...",
+              "target":null,
+              "subject":null,
+              "predicate":null,
+              "text":null,
+              "args":{}
+            }
+
+            Povolené ACTION op:
+            observe, inspect, move_to, approach, speak, ask, tell, request, offer, wait
+
+            Povolené QUERY op:
+            current_location, time, money, known_people, visible_people,
+            location_of, exists_here, property, available_social_contact
+
+            Zásady:
+            - Neodhaduj výsledek akce.
+            - Nevymýšlej nové entity.
+            - target je adresát/cíl, subject je předmět nebo téma.
+            - U ceny použij args.price jen pokud hráč skutečně uvedl konkrétní číslo.
+            - Věta "to je moc drahé" NENÍ nabídka konkrétní ceny. Může být offer bez price nebo speak.
+            - Zájmena řeš z CURRENT CONVERSATION a FOCUS SUBJECT.
+            - "Půjdu za X" je move_to s target X.
+            - "Kde je X" je query location_of se subject X.
+            - Otázka NPC je action ask, nikoli world query, pokud se hráč ptá konkrétní postavy.
+            - Pokud význam nejde bezpečně vyjádřit povolenými operacemi, vrať unknown.
             """;
 
         var user = $"""
-            LOCATION: {LocationNames.Name(state.Location)}
+            CURRENT LOCATION: {WorldData.LocationName(state.Location)}
             CURRENT CONVERSATION: {conversationTarget ?? "null"}
-            AVAILABLE TARGETS: {(availableTargets.Count == 0 ? "none" : string.Join(", ", availableTargets))}
-            ALLOWED INTENTS: {string.Join(", ", allowed)}
+            FOCUS SUBJECT: {focusSubject ?? "null"}
+            VISIBLE ENTITIES: {(visibleEntities.Count == 0 ? "none" : string.Join(", ", visibleEntities))}
+            KNOWN ENTITIES: {(knownEntities.Count == 0 ? "none" : string.Join(", ", knownEntities))}
             PLAYER INPUT: {input}
             """;
 
@@ -570,7 +725,7 @@ internal sealed class OllamaIntentInterpreter : IIntentInterpreter, IDisposable
             stream = false,
             think = false,
             format = "json",
-            options = new { temperature = 0.0, num_predict = 80 },
+            options = new { temperature = 0.0, num_predict = 160 },
             messages = new[]
             {
                 new { role = "system", content = system },
@@ -585,25 +740,16 @@ internal sealed class OllamaIntentInterpreter : IIntentInterpreter, IDisposable
             if (!response.IsSuccessStatusCode)
                 return null;
 
-            var parsed = JsonSerializer.Deserialize<OllamaResponse>(
+            var envelope = JsonSerializer.Deserialize<OllamaEnvelope>(
                 body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-
-            var content = parsed?.Message?.Content?.Trim();
+            var content = envelope?.Message?.Content?.Trim();
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
-            var proposal = JsonSerializer.Deserialize<IntentProposal>(
+            var command = JsonSerializer.Deserialize<SemanticCommand>(
                 content, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
-            if (proposal is null ||
-                !Enum.TryParse<PlayerIntent>(proposal.Intent, true, out var intent))
-                return null;
-
-            if (proposal.Target is not null &&
-                !availableTargets.Contains(proposal.Target, StringComparer.Ordinal))
-                return null;
-
-            return new ParsedIntent(intent, proposal.Target, "qwen");
+            return command?.Normalize();
         }
         catch
         {
@@ -614,296 +760,356 @@ internal sealed class OllamaIntentInterpreter : IIntentInterpreter, IDisposable
     public void Dispose() => _client.Dispose();
 
     private sealed record OllamaMessage(string? Content);
-    private sealed record OllamaResponse(OllamaMessage? Message);
-    private sealed record IntentProposal(string Intent, string? Target);
+    private sealed record OllamaEnvelope(OllamaMessage? Message);
+}
+
+internal static class SemanticValidator
+{
+    private static readonly HashSet<string> ActionOps =
+    [
+        "observe", "inspect", "move_to", "approach", "speak",
+        "ask", "tell", "request", "offer", "wait"
+    ];
+
+    private static readonly HashSet<string> QueryOps =
+    [
+        "current_location", "time", "money", "known_people", "visible_people",
+        "location_of", "exists_here", "property", "available_social_contact"
+    ];
+
+    public static ValidationResult Validate(SemanticCommand command, WorldState state)
+    {
+        if (command.Kind == "action" && !ActionOps.Contains(command.Op))
+            return ValidationResult.Fail("AI navrhla nepovolenou akci. Svět se nezměnil.");
+
+        if (command.Kind == "query" && !QueryOps.Contains(command.Op))
+            return ValidationResult.Fail("AI navrhla nepovolený dotaz. Svět se nezměnil.");
+
+        if (command.Kind is not ("action" or "query"))
+            return ValidationResult.Fail("Neplatný typ sémantického příkazu.");
+
+        var target = WorldData.CanonicalEntity(command.Target);
+        if (command.Target is not null && target is null &&
+            command.Op is not ("move_to" or "exists_here" or "property"))
+        {
+            return ValidationResult.Fail("Cíl příkazu neodpovídá žádné známé nebo dostupné entitě.");
+        }
+
+        return ValidationResult.Ok();
+    }
+}
+
+internal static class NpcKnowledge
+{
+    public static KnowledgeAnswer Answer(string npc, string topic, WorldState state)
+    {
+        var t = TextNorm.Normalize(topic);
+
+        if (npc == "Matěj")
+        {
+            if (TextNorm.ContainsAny(t, "jak se mas", "zdravi", "jak se dari"))
+                return new("Matěj je v pořádku a právě pracuje v hostinci.", null);
+
+            if (TextNorm.ContainsAny(t, "jidlo", "snidan", "jist"))
+                return new("Matěj může nabídnout běžnou snídani; konkrétní složení není definováno.", "snídaně");
+
+            if (TextNorm.ContainsAny(t, "rusno", "trh", "namesti"))
+                return new("Dnes je tržní den a náměstí bývá během tržního dne rušnější.", "trh");
+
+            if (TextNorm.ContainsAny(t, "tajna dohoda", "dohoda rady", "rada"))
+                return new("Matěj nemá žádnou spolehlivou informaci o údajné tajné dohodě a neví, zda existuje.", "městská rada");
+
+            return new("Matěj k tomuto tématu nemá v dostupných znalostech žádnou spolehlivou informaci.", topic);
+        }
+
+        if (npc == "Havel")
+        {
+            if (TextNorm.ContainsAny(t, "co prodavas", "zbozi", "obil"))
+                return new($"Havel prodává obilí za {state.GrainPriceGroats} groše za míru.", "obilí");
+
+            if (TextNorm.ContainsAny(t, "cena", "kolik", "drahe", "stoji"))
+                return new($"Havlova aktuální cena obilí je {state.GrainPriceGroats} groše za míru.", "obilí");
+
+            return new("Havel k tomuto tématu nemá v prototypu žádnou další definovanou znalost.", topic);
+        }
+
+        return new("NPC nemá k tématu definovanou znalost.", topic);
+    }
+}
+
+internal static class WorldData
+{
+    public static string LocationName(LocationId location) => location switch
+    {
+        LocationId.InnRoom => "pokoj v hostinci U Tří korun",
+        LocationId.InnCommonRoom => "společenská místnost hostince U Tří korun",
+        LocationId.MarketSquare => "rabenfeldské náměstí",
+        _ => location.ToString()
+    };
+
+    public static List<string> VisibleEntities(LocationId location) => location switch
+    {
+        LocationId.InnCommonRoom => ["Matěj"],
+        LocationId.MarketSquare => ["Havel", "stánky", "povozy", "měšťané"],
+        _ => ["okno", "postel", "stůl", "židle", "dveře"]
+    };
+
+    public static List<string> KnownEntities(WorldState state) =>
+        ["Matěj", "hostinec U Tří korun", "rabenfeldské náměstí"];
+
+    public static string? CanonicalEntity(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var n = TextNorm.Normalize(raw);
+        if (n.Contains("matej")) return "Matěj";
+        if (n.Contains("havel")) return "Havel";
+        return null;
+    }
+
+    public static string? CanonicalSubject(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var n = TextNorm.Normalize(raw);
+        if (n.Contains("obil")) return "obilí";
+        if (n.Contains("snidan")) return "snídaně";
+        return raw.Trim();
+    }
+
+    public static string DisplayName(string canonical) => canonical;
+
+    public static LocationId? KnownLocationOf(string entity, WorldState state) => entity switch
+    {
+        "Matěj" => LocationId.InnCommonRoom,
+        "Havel" when state.Location == LocationId.MarketSquare => LocationId.MarketSquare,
+        _ => null
+    };
+
+    public static LocationId? ResolveDestination(string? raw, WorldState state)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var person = CanonicalEntity(raw);
+        if (person is not null)
+            return KnownLocationOf(person, state);
+
+        var n = TextNorm.Normalize(raw);
+        if (n.Contains("hostinc") || n.Contains("tri korun") || n.Contains("matej"))
+            return LocationId.InnCommonRoom;
+        if (n.Contains("namest") || n.Contains("trh") || n.Contains("havel"))
+            return LocationId.MarketSquare;
+        if (n.Contains("pokoj"))
+            return LocationId.InnRoom;
+        return null;
+    }
+
+    public static int TravelMinutes(LocationId from, LocationId to)
+    {
+        if (from == to) return 0;
+        if ((from == LocationId.InnRoom && to == LocationId.InnCommonRoom) ||
+            (from == LocationId.InnCommonRoom && to == LocationId.InnRoom))
+            return 2;
+        return 5;
+    }
+
+    public static bool IsVisible(string entity, LocationId location) =>
+        VisibleEntities(location).Contains(entity, StringComparer.Ordinal);
+
+    public static string? DefaultConversationTarget(LocationId location) => location switch
+    {
+        LocationId.InnCommonRoom => "Matěj",
+        LocationId.MarketSquare => "Havel",
+        _ => null
+    };
+
+    public static string VisiblePeopleAnswer(LocationId location) => location switch
+    {
+        LocationId.InnCommonRoom => "V této části prototypu tu vidíš Matěje.",
+        LocationId.MarketSquare => "Na náměstí vidíš Havla a také další měšťany, kteří zatím nejsou konkretizováni jako persistentní postavy.",
+        _ => "V pokoji teď žádnou další osobu nevidíš."
+    };
+
+    public static string AvailableSocialContactAnswer(LocationId location) => location switch
+    {
+        LocationId.MarketSquare => "Ano. Kromě Havla jsou na tržišti další měšťané. Zatím nejsou konkretizováni; budoucí engine z nich při skutečném kontaktu vytvoří persistentní NPC.",
+        LocationId.InnCommonRoom => "V aktuálním vertical slice je konkrétní dostupnou postavou Matěj.",
+        _ => "V pokoji teď není nikdo, s kým by ses mohl nově seznámit."
+    };
 }
 
 internal static class SceneContracts
 {
-    public static SceneContract InnRoomArrival(WorldState s) => new(
-        "Pokoj v hostinci U Tří korun", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Je časné ráno.",
-            "Pavel je v pokoji hostince U Tří korun v Rabenfeldu.",
-            "Z okna je vidět náměstí.",
-            "Na náměstí začíná běžný trh."
-        ],
-        ["Může být zmíněno ranní světlo a neurčitý ruch z náměstí."],
-        ["Nové osoby.", "Konkrétní zboží.", "Mimořádné události."],
-        "Uveď hráče do scény.");
-
-    public static SceneContract InnCommonArrival(WorldState s) => new(
-        "Společenská místnost U Tří korun", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel je ve společenské místnosti hostince U Tří korun.",
-            "Hostinský Matěj je přítomen.",
-            "Matěj je kolem padesáti let a Pavla zná z několika návštěv."
-        ],
-        ["Může být zmíněn běžný tlumený ruch hostince."],
-        ["Další konkrétní hosté.", "Konkrétní jídla.", "Pověsti nebo zprávy."],
-        "Stručně popiš lokaci.");
-
-    public static SceneContract MarketArrival(WorldState s) => new(
-        "Rabenfeldské náměstí", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel je na náměstí v Rabenfeldu.",
-            "Probíhá běžný tržní den.",
-            "Na náměstí jsou stánky, povozy a měšťané.",
-            "Kupec Havel zde prodává obilí za 4 groše za míru."
-        ],
-        ["Může zaznít neurčitý tržní ruch."],
-        ["Další pojmenované osoby.", "Konkrétní jiné zboží.", "Konflikty nebo zprávy."],
-        "Stručně popiš příchod na náměstí.");
-
-    public static SceneContract LookRoom(WorldState s) => new(
-        "Prohlídka pokoje", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel je v jednoduchém pokoji hostince U Tří korun.",
-            "V pokoji je postel, stůl, židle a okno.",
-            "Okno vede na rabenfeldské náměstí."
-        ],
-        ["Může být zmíněno ranní světlo v pokoji."],
-        ["Pohled na dění na trhu.", "Další nábytek.", "Předměty s herní hodnotou.", "Nové osoby."],
-        "Pavel si krátce prohlédne pokoj.");
-
-    public static SceneContract LookFromWindow(WorldState s) => new(
-        "Pozorování Rabenfeldu z okna", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel stojí u okna pokoje U Tří korun.",
-            "Je časné ráno.",
-            "Na náměstí začíná běžný trh.",
-            "Pavel vidí stánky, několik povozů a několik měšťanů.",
-            "Neprobíhá nic mimořádného."
-        ],
-        ["Může být zmíněno ranní světlo a neurčitý ruch trhu."],
-        ["Konkrétní zboží.", "Nové osoby.", "Počasí kromě světelných podmínek.", "Události."],
-        "Pavel tři minuty pozoruje město.");
-
-    public static SceneContract LookInn(WorldState s) => new(
-        "Rozhlédnutí v hostinci", "NARRATOR", "PLAYER", "second_person",
-        ["Pavel je ve společenské místnosti U Tří korun.", "Matěj je přítomen."],
-        ["Může být zmíněn běžný tlumený ruch místnosti."],
-        ["Další konkrétní lidé.", "Konkrétní jídlo nebo pití.", "Nové informace."],
-        "Pavel se krátce rozhlédne.");
-
-    public static SceneContract LookMarket(WorldState s) => new(
-        "Rozhlédnutí na trhu", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel stojí na rabenfeldském náměstí.",
-            "Probíhá běžný tržní den.",
-            "Pavel vidí stánky, povozy a měšťany.",
-            "Havel prodává obilí za 4 groše za míru."
-        ],
-        ["Může být zmíněn neurčitý hluk trhu."],
-        ["Konkrétní jiné zboží.", "Další pojmenované osoby.", "Události nebo pověsti."],
-        "Pavel se dvě minuty rozhlíží.");
-
-    public static SceneContract InspectMatej(WorldState s) => new(
-        "Prohlídka Matěje", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel si prohlíží Matěje.",
-            "Matěj je hostinský kolem padesáti let.",
-            "Pavel ho zná z několika návštěv."
-        ],
-        ["Matěj může působit jako člověk zvyklý na práci v hostinci."],
-        ["Konkrétní minulost.", "Skryté vlastnosti.", "Tajemství.", "Nové předměty."],
-        "Pavel nezíská žádnou novou skrytou informaci.");
-
-    public static SceneContract InspectHavel(WorldState s) => new(
-        "Prohlídka Havla", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel si prohlíží Havla.",
-            "Havel je kupec.",
-            "Havel prodává obilí za 4 groše za míru.",
-            "Havel Pavla nezná."
-        ],
-        ["Havel může působit věcně a soustředěně na obchod."],
-        ["Konkrétní věk.", "Rodina.", "Majetek.", "Skryté vlastnosti.", "Další osoby."],
-        "Pavel nezíská žádnou novou skrytou informaci.");
-
-    public static SceneContract GoDownstairs(WorldState s) => new(
-        "Cesta dolů za Matějem", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel opustí pokoj a sejde do společenské místnosti hostince U Tří korun.",
-            "Hostinský Matěj je ve společenské místnosti.",
-            "Matěj Pavla zná z několika návštěv."
-        ],
-        ["Přechod může být popsán jednou krátkou větou."],
-        ["Další osoby.", "Nové události.", "Konkrétní jídlo nebo pití."],
-        "Pavel dorazí do společenské místnosti.");
-
-    public static SceneContract GoSquare(WorldState s) => new(
-        "Cesta na náměstí", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel odejde z hostince U Tří korun na rabenfeldské náměstí.",
-            "Na náměstí probíhá běžný tržní den.",
-            "Havel zde prodává obilí za 4 groše za míru."
-        ],
-        ["Může být zmíněn neurčitý tržní ruch."],
-        ["Další pojmenované osoby.", "Konkrétní jiné zboží.", "Události."],
-        "Přesun trvá pět minut.");
-
-    public static SceneContract GoInn(WorldState s) => new(
-        "Návrat do hostince", "NARRATOR", "PLAYER", "second_person",
-        [
-            "Pavel odejde z náměstí a vrátí se do společenské místnosti hostince U Tří korun.",
-            "Matěj je v hostinci."
-        ],
-        ["Přesun popiš stručně."],
-        ["Další konkrétní osoby.", "Nové události."],
-        "Přesun trvá pět minut.");
-
-    public static SceneContract GreetMatej(WorldState s) => new(
-        "Pozdrav Matěje", "Matěj", "Pavel", "dialogue",
-        ["Pavel pozdraví Matěje.", "Matěj Pavla zná z několika návštěv.", "Matěj je přátelský a věcný."],
-        ["Matěj může Pavla krátce pozdravit zpět."],
-        ["Nové zprávy.", "Konkrétní jídlo.", "Pověsti."],
-        "Matěj pozdrav opětuje.");
-
-    public static SceneContract GreetHavel(WorldState s) => new(
-        "Pozdrav Havla", "Havel", "Pavel", "dialogue",
-        ["Pavel pozdraví Havla.", "Havel Pavla nezná.", "Havel je věcný kupec."],
-        ["Havel může krátce pozdravit zpět."],
-        ["Další osoby.", "Nová nabídka.", "Pověsti."],
-        "Havel pozdrav opětuje bez změny vztahu.");
-
-    public static SceneContract AskHowMatej(WorldState s) => new(
-        "Jak se má Matěj", "Matěj", "Pavel", "dialogue",
-        [
-            "Pavel se Matěje ptá, jak se má.",
-            "Matěj je v pořádku.",
-            "Matěj je právě v práci v hostinci.",
-            "Matěj nemá důvod sdělovat žádnou mimořádnou událost."
-        ],
-        ["Matěj může odpovědět krátce a civilně."],
-        ["Zdravotní problém.", "Rodinný problém.", "Nová událost.", "Pověst."],
-        "Matěj odpoví běžnou společenskou odpovědí.");
-
-    public static SceneContract AskFood(WorldState s) => new(
-        "Dotaz na jídlo", "Matěj", "Pavel", "dialogue",
-        [
-            "Pavel se Matěje ptá, zda má něco k jídlu.",
-            "Matěj jako hostinský může nabídnout běžnou snídani.",
-            "Konkrétní složení snídaně není definováno."
-        ],
-        ["Matěj může stručně potvrdit, že snídani připraví nebo přinese."],
-        ["Konkrétní pokrm.", "Konkrétní cena.", "Další hosté."],
-        "Matěj potvrdí, že snídani může nabídnout.");
-
-    public static SceneContract OrderBreakfast(WorldState s) => new(
-        "Objednání snídaně", "Matěj", "Pavel", "dialogue",
-        [
-            "Pavel požádá Matěje o snídani.",
-            "Matěj Pavlovi přinese snídani.",
-            "Konkrétní podoba snídaně není definována."
-        ],
-        ["Matěj může snídani položit před hráče a krátce reagovat."],
-        ["Konkrétní jídlo.", "Konkrétní cena.", "Další hosté."],
-        "Pavel dostane snídani.");
-
-    public static SceneContract AskBusy(WorldState s) => new(
-        "Dotaz na dnešní ruch", "Matěj", "Pavel", "dialogue",
-        [
-            "Pavel se Matěje ptá, zda je dnes ve městě rušno.",
-            "Dnes je tržní den.",
-            "Náměstí bývá během tržního dne rušnější.",
-            "Matěj nemá žádnou další relevantní zprávu."
-        ],
-        ["Matěj může odpovědět krátce a věcně."],
-        ["Náměstí je plné.", "Původ obchodníků.", "Další zprávy.", "Pověsti."],
-        "Matěj odpoví pouze k tržnímu dni.");
-
-    public static SceneContract BreakfastBusy(WorldState s) => new(
-        "Snídaně s Matějem", "Matěj", "Pavel", "dialogue",
-        [
-            "Matěj přinese Pavlovi snídani.",
-            "Konkrétní podoba snídaně není definována.",
-            "Pavel se zeptá, zda je dnes ve městě rušno.",
-            "Matěj odpoví, že je tržní den a náměstí bývá rušnější.",
-            "Matěj nemá žádnou další relevantní zprávu."
-        ],
-        ["Matěj může položit snídani na stůl nebo udělat jedno krátké gesto hostinského."],
-        ["Konkrétní jídlo nebo nápoj.", "Další hosté.", "Pověsti.", "Příchod Pavla do hostince."],
-        "Rozhovor trvá pět minut.");
-
-    public static SceneContract AskSecret(WorldState s) => new(
-        "Otázka na údajnou tajnou dohodu", "Matěj", "Pavel", "dialogue",
-        [
-            "Jediným zdrojem informace o údajné tajné dohodě je Pavlova otázka.",
-            "Matěj o žádné takové dohodě nic spolehlivého neví.",
-            "Matěj neví, zda taková dohoda existuje.",
-            "Matěj její existenci nepotvrdí."
-        ],
-        ["Matěj může odpovědět stručně a opatrně."],
-        ["Matěj o dohodě také slyšel.", "Po městě kolují drby.", "Matěj něco tají.", "Rada je podezřelá."],
-        "Matěj odpoví bez nové informace.");
-
-    public static SceneContract TellPlan(WorldState s) => new(
-        "Pavel sděluje svůj plán", "Pavel", "Matěj", "dialogue",
-        [
-            "Pavel řekne Matějovi, že dnes chce jít nejprve na trh a potom na radnici.",
-            "Matěj si tuto informaci zapamatuje."
-        ],
-        ["Matěj může krátce potvrdit, že rozumí."],
-        ["Důvod návštěvy trhu.", "Důvod návštěvy radnice.", "Další plán."],
-        "Informace se stává součástí Matějovy paměti.");
-
-    public static SceneContract GoodbyeMatej(WorldState s)
+    public static SceneContract Arrival(WorldState state) => state.Location switch
     {
-        var facts = new List<string>
+        LocationId.InnRoom => Contract(
+            state, "Pokoj U Tří korun", "NARRATOR", "PLAYER", "second_person",
+            ["Je časné ráno.", "Hráč je v pokoji hostince U Tří korun.", "Z okna je vidět rabenfeldské náměstí."],
+            ["Může být zmíněno ranní světlo."],
+            ["Nové osoby.", "Nové předměty.", "Jiná lokace."],
+            "Uveď hráče stručně do aktuální lokace."),
+
+        LocationId.InnCommonRoom => Contract(
+            state, "Společenská místnost U Tří korun", "NARRATOR", "PLAYER", "second_person",
+            ["Hráč je ve společenské místnosti hostince U Tří korun.", "Matěj je přítomen."],
+            ["Může zaznít neurčitý ruch hostince."],
+            ["Další konkrétní hosté.", "Konkrétní jídlo.", "Jiná lokace."],
+            "Stručně popiš aktuální lokaci."),
+
+        _ => Contract(
+            state, "Rabenfeldské náměstí", "NARRATOR", "PLAYER", "second_person",
+            ["Hráč je na rabenfeldském náměstí.", "Probíhá běžný tržní den.", "Havel zde prodává obilí za 4 groše za míru."],
+            ["Může zaznít neurčitý tržní ruch."],
+            ["Havlův krám nebo interiér.", "Další pojmenované osoby.", "Jiná lokace."],
+            "Stručně popiš aktuální lokaci.")
+    };
+
+    public static SceneContract LookRoom(WorldState s) => Contract(
+        s, "Prohlídka pokoje", "NARRATOR", "PLAYER", "second_person",
+        ["Hráč je v pokoji U Tří korun.", "V pokoji je postel, stůl, židle, okno a dveře."],
+        ["Může být zmíněno ranní světlo."],
+        ["Dění na trhu.", "Další nábytek.", "Nové osoby.", "Jiná lokace."],
+        "Hráč si krátce prohlédne pokoj.");
+
+    public static SceneContract LookFromWindow(WorldState s) => Contract(
+        s, "Pohled z okna", "NARRATOR", "PLAYER", "second_person",
+        ["Hráč stojí u okna pokoje U Tří korun.", "Na náměstí začíná běžný trh.", "Vidí stánky, povozy a měšťany.", "Nic mimořádného se neděje."],
+        ["Může být zmíněno ranní světlo a neurčitý ruch."],
+        ["Konkrétní zboží.", "Nové osoby.", "Jiná lokace."],
+        "Hráč pozoruje město.");
+
+    public static SceneContract LookAround(WorldState s) => s.Location switch
+    {
+        LocationId.InnRoom => LookRoom(s),
+        LocationId.InnCommonRoom => Contract(
+            s, "Rozhlédnutí v hostinci", "NARRATOR", "PLAYER", "second_person",
+            ["Hráč je ve společenské místnosti U Tří korun.", "Matěj je přítomen."],
+            ["Může zaznít neurčitý ruch místnosti."],
+            ["Další konkrétní lidé.", "Konkrétní jídlo.", "Jiná lokace."],
+            "Hráč se krátce rozhlédne."),
+        _ => Contract(
+            s, "Rozhlédnutí na trhu", "NARRATOR", "PLAYER", "second_person",
+            ["Hráč stojí na rabenfeldském náměstí.", "Probíhá běžný tržní den.", "Vidí více stánků, povozy a měšťany.", "Havel prodává obilí za 4 groše za míru."],
+            ["Může zaznít neurčitý hluk trhu."],
+            ["Havlův krám nebo interiér.", "Konkrétní jiné zboží.", "Jiná lokace."],
+            "Hráč se krátce rozhlédne.")
+    };
+
+    public static SceneContract InspectMatej(WorldState s) => Contract(
+        s, "Prohlídka Matěje", "NARRATOR", "PLAYER", "second_person",
+        ["Matěj je hostinský kolem padesáti let.", "Hráč ho zná z několika návštěv.", "Matěj je v hostinci U Tří korun."],
+        ["Může působit jako člověk zvyklý na práci v hostinci."],
+        ["Skrytá minulost.", "Tajemství.", "Nové předměty.", "Jiná lokace."],
+        "Hráč si Matěje krátce prohlédne.");
+
+    public static SceneContract InspectHavel(WorldState s) => Contract(
+        s, "Prohlídka Havla", "NARRATOR", "PLAYER", "second_person",
+        ["Havel je kupec na rabenfeldském náměstí.", "Prodává obilí za 4 groše za míru.", "Hráče osobně nezná."],
+        ["Havel může působit věcně a soustředěně na obchod."],
+        ["Havlův krám nebo interiér.", "Třídění zrna.", "Další osoby.", "Skryté vlastnosti.", "Jiná lokace."],
+        "Hráč si Havla krátce prohlédne.");
+
+    public static SceneContract Move(WorldState before, LocationId destination)
+    {
+        var after = before.CloneWithLocation(destination);
+        return destination switch
         {
-            "Pavel se při odchodu loučí s Matějem.",
-            "Matěj odpovídá Pavlovi."
+            LocationId.InnRoom => Contract(
+                after, "Cesta do pokoje", "NARRATOR", "PLAYER", "second_person",
+                ["Hráč se přesune do svého pokoje v hostinci U Tří korun."],
+                ["Přesun popiš stručně."], ["Nové události.", "Jiný cíl cesty."], "Přesun se podařil."),
+
+            LocationId.InnCommonRoom => Contract(
+                after, "Cesta do hostince", "NARRATOR", "PLAYER", "second_person",
+                ["Hráč dorazí do společenské místnosti hostince U Tří korun.", "Matěj je přítomen."],
+                ["Přesun popiš stručně."], ["Další konkrétní osoby.", "Jiná lokace."], "Přesun se podařil."),
+
+            _ => Contract(
+                after, "Cesta na náměstí", "NARRATOR", "PLAYER", "second_person",
+                ["Hráč dorazí na rabenfeldské náměstí.", "Probíhá běžný tržní den.", "Havel zde prodává obilí."],
+                ["Může zaznít neurčitý tržní ruch."], ["Havlův krám.", "Jiná lokace."], "Přesun se podařil.")
         };
-
-        if (s.MatejKnowsPlan)
-        {
-            facts.Add("Matěj si pamatuje, že Pavel dnes plánuje nejprve trh a potom radnici.");
-            facts.Add("Matěj nezná důvod ani jedné návštěvy.");
-        }
-
-        return new SceneContract(
-            "Rozloučení s Matějem", "Matěj", "Pavel", "dialogue", facts,
-            ["Matěj může Pavlovi popřát dobrý den nebo štěstí."],
-            ["Matěj jde na trh nebo radnici.", "Důvod Pavlovy návštěvy.", "Další úkol nebo schůzka."],
-            "Matěj se krátce rozloučí.");
     }
 
-    public static SceneContract TalkMatej(WorldState s) => new(
-        "Oslovení Matěje", "Matěj", "Pavel", "dialogue",
-        [
-            "Pavel osloví hostinského Matěje.",
-            "Matěj Pavla zná z několika návštěv.",
-            "Matěj je věcný a přátelský."
-        ],
-        ["Matěj může Pavla krátce pozdravit a zeptat se, co potřebuje."],
-        ["Nové zprávy.", "Pověsti.", "Konkrétní nabídka jídla.", "Tajemství."],
-        "Matěj reaguje na oslovení.");
+    public static SceneContract Approach(WorldState s, string target) => Contract(
+        s, $"Přistoupení k {target}", target, "PLAYER", "dialogue",
+        [$"Hráč přistoupí k osobě {target}.", $"{target} je v aktuální lokaci."],
+        [$"{target} může krátce reagovat na příchod hráče."],
+        ["Nová lokace.", "Nové osoby.", "Nové informace."],
+        $"{target} zaznamená hráčovu přítomnost.");
 
-    public static SceneContract TalkHavel(WorldState s) => new(
-        "Oslovení Havla", "Havel", "Pavel", "dialogue",
-        [
-            "Pavel osloví kupce Havla.",
-            "Havel Pavla nezná.",
-            "Havel je věcný obchodník.",
-            "Havel prodává obilí za 4 groše za míru."
-        ],
-        ["Havel může Pavla stručně vyzvat, aby řekl, co potřebuje."],
-        ["Další osoby.", "Příčina ceny obilí.", "Slevy.", "Pověsti."],
-        "Havel reaguje věcně.");
+    public static SceneContract Speak(WorldState s, string target, string? text) => Contract(
+        s, $"Rozhovor s {target}", target, "PLAYER", "dialogue",
+        [$"Hráč promluví k osobě {target}.", text is null ? "Obsah není dále specifikován." : $"Hráč řekl: {text}", $"{target} je v aktuální lokaci."],
+        [$"{target} může krátce reagovat bez doplnění nových faktů."],
+        ["Nové informace.", "Nová lokace.", "Další osoby."],
+        "Reakce má odpovídat pouze známým skutečnostem.");
 
-    public static SceneContract BargainFailure(WorldState s) => new(
-        "Neúspěšné vyjednávání s Havlem", "Havel", "Pavel", "dialogue",
+    public static SceneContract NpcAnswer(
+        WorldState s, string npc, string topic, KnowledgeAnswer answer) => Contract(
+        s, $"Odpověď {npc}", npc, "PLAYER", "dialogue",
+        [$"Hráč se ptá osoby {npc} na téma: {topic}.", $"Kanonická znalost NPC pro odpověď: {answer.Fact}"],
+        [$"{npc} může odpovědět přirozeně a stručně."],
+        ["Další znalosti mimo uvedenou kanonickou znalost.", "Nová lokace.", "Další osoby."],
+        "NPC odpoví pouze v mezích své znalosti.");
+
+    public static SceneContract Tell(WorldState s, string target, string text, bool remembersPlan) => Contract(
+        s, $"Sdělení osobě {target}", target, "PLAYER", "dialogue",
+        [$"Hráč sdělí osobě {target}: {text}", remembersPlan ? "Matěj si zapamatuje plán: trh a potom radnice." : "Sdělení nemění jiná kanonická fakta."],
+        [$"{target} může krátce potvrdit, že slyšel sdělení."],
+        ["Doplňování dalších plánů.", "Nová lokace."],
+        "Sdělení bylo vysloveno.");
+
+    public static SceneContract Breakfast(WorldState s) => Contract(
+        s, "Snídaně", "Matěj", "PLAYER", "dialogue",
+        ["Hráč požádal o snídani.", "Matěj přinese běžnou snídani.", "Konkrétní složení ani cena nejsou definovány."],
+        ["Matěj může snídani položit před hráče."],
+        ["Konkrétní jídlo.", "Konkrétní cena.", "Další hosté.", "Jiná lokace."],
+        "Hráč dostane snídani.");
+
+    public static SceneContract AskForBetterPrice(WorldState s) => Contract(
+        s, "Jednání o ceně", "Havel", "PLAYER", "dialogue",
+        [$"Aktuální cena obilí je {s.GrainPriceGroats} groše za míru.", "Hráč vyjádřil nespokojenost s cenou, ale neuvedl konkrétní nabídku."],
+        ["Havel může stručně potvrdit svou aktuální cenu."],
+        ["Konkrétní nabídnutá cena.", "Polovina ceny.", "Sleva, kterou engine neurčil.", "Další zákazníci."],
+        "Cena se nemění.");
+
+    public static SceneContract PriceOffer(WorldState s, int price, bool accepted) => Contract(
+        s, "Cenová nabídka Havlovi", "Havel", "PLAYER", "dialogue",
         [
-            "Pavel chce koupit obilí za polovinu ceny.",
-            "Havel nabídku slušně odmítne.",
-            "Cena zůstává 4 groše za míru.",
-            "Havel není nepřátelský.",
-            "Vztah mezi Pavlem a Havlem se nemění."
+            $"Hráč nabízí {price} grošů za míru obilí.",
+            $"Havlova aktuální cena je {s.GrainPriceGroats} groše za míru.",
+            accepted ? "Havel tuto cenu přijme." : "Havel tuto cenu odmítne.",
+            "Vztah mezi hráčem a Havlem se touto jednou nabídkou nemění."
         ],
-        ["Havel může nabídku odmítnout krátce a věcně."],
-        ["Nedostatek obilí.", "Špatná úroda.", "Válka.", "Další zákazníci.", "Slevy.", "Herní mechanika."],
-        "Skrytý test vyjednávání neuspěl; mechaniku v textu nezmiňuj.");
+        ["Havel může odpovědět krátce a věcně."],
+        ["Jiná nabídnutá cena.", "Příčina Havlovy ceny.", "Další zákazníci.", "Nová lokace."],
+        accepted ? "Havel souhlasí s nabídnutou cenou." : "Havel nabídku odmítne.");
+
+    public static SceneContract Wait(WorldState s, int minutes) => Contract(
+        s, "Čekání", "NARRATOR", "PLAYER", "second_person",
+        [$"Hráč čeká {minutes} minut.", "Během čekání nenastane žádná mimořádná událost."],
+        ["Může být zmíněn běžný ruch aktuální lokace."],
+        ["Nové události.", "Nové osoby.", "Jiná lokace."],
+        "Čas uplyne bez významné události.");
+
+    private static SceneContract Contract(
+        WorldState state,
+        string title,
+        string speaker,
+        string listener,
+        string perspective,
+        List<string> facts,
+        List<string> flavor,
+        List<string> forbidden,
+        string outcome) =>
+        new(
+            title,
+            WorldData.LocationName(state.Location),
+            speaker,
+            listener,
+            perspective,
+            facts,
+            flavor,
+            forbidden,
+            outcome);
 }
 
 internal sealed class OllamaRenderer : INarrativeRenderer, IDisposable
@@ -926,28 +1132,25 @@ internal sealed class OllamaRenderer : INarrativeRenderer, IDisposable
     public async Task<string> RenderAsync(SceneContract contract)
     {
         if (_noAi)
-            return Fallback(contract);
+            return contract.Outcome;
 
         var system = """
             Jsi stylistický renderer českého narativního RPG RPGSandbox.
-            Herní engine je jediná autorita nad realitou světa. Dostáváš hotový Engine Contract.
+            Engine už rozhodl realitu světa.
 
-            Pravidla:
-            - Nepřidávej žádnou osobu, místo, objekt, podnik, událost, motiv, příčinu, pověst ani vztah mimo kontrakt.
-            - Povolená atmosféra je pouze v ALLOWED FLAVOR.
-            - Dodrž přesně SPEAKER, LISTENER a PERSPECTIVE.
-            - Hráč se v herní próze vždy oslovuje ve 2. osobě jednotného čísla: ty, tebe, tobě; nikdy jménem Pavel ve 3. osobě.
-            - second_person znamená "vidíš", "jdeš", "stojíš", nikdy "vidíte".
+            Absolutní pravidla:
+            - CANONICAL LOCATION je jediná aktuální lokace hráče. Nikdy nevytvářej jiný interiér, krám, místnost ani místo.
+            - Nepřidávej osoby, objekty, události, motivy, příčiny, pověsti ani vztahy mimo kontrakt.
+            - Hráče oslovuj ve 2. osobě jednotného čísla, nikdy jménem Pavel ve 3. osobě.
             - Pokud detail není uveden, vynech ho.
-            - Nevysvětluj skryté úmysly ani emoce, pokud nejsou faktem.
-            - Nevysvětluj engine, pravidla ani hody.
-            - Piš přirozenou současnou češtinou jako kvalitní české RPG.
-            - Kratší správný text je lepší než kreativní doplnění.
-            - Výstup pouze jako finální herní próza, bez nadpisu a komentáře.
-            - Obvykle 15–60 slov.
+            - Nevysvětluj engine ani pravidla.
+            - Piš přirozenou současnou češtinou.
+            - Kratší přesný text je lepší než kreativní doplnění.
+            - Výstup pouze jako finální herní próza.
             """;
 
         var user = $"""
+            CANONICAL LOCATION: {contract.CanonicalLocation}
             SCENE: {contract.Title}
             SPEAKER: {contract.Speaker}
             LISTENER: {contract.Listener}
@@ -971,7 +1174,7 @@ internal sealed class OllamaRenderer : INarrativeRenderer, IDisposable
             model = _model,
             stream = false,
             think = false,
-            options = new { temperature = 0.18, num_predict = 150 },
+            options = new { temperature = 0.15, num_predict = 140 },
             messages = new[]
             {
                 new { role = "system", content = system },
@@ -985,25 +1188,16 @@ internal sealed class OllamaRenderer : INarrativeRenderer, IDisposable
             var body = await response.Content.ReadAsStringAsync();
             response.EnsureSuccessStatusCode();
 
-            var parsed = JsonSerializer.Deserialize<OllamaResponse>(
+            var envelope = JsonSerializer.Deserialize<OllamaEnvelope>(
                 body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            var text = parsed?.Message?.Content?.Trim();
-
-            return string.IsNullOrWhiteSpace(text) ? Fallback(contract) : text;
+            return envelope?.Message?.Content?.Trim() is { Length: > 0 } text
+                ? text
+                : contract.Outcome;
         }
         catch (Exception ex)
         {
-            return $"{Fallback(contract)}\n[Lokální AI není dostupná: {ex.Message}]";
+            return $"{contract.Outcome}\n[Lokální AI není dostupná: {ex.Message}]";
         }
-    }
-
-    private static string Fallback(SceneContract contract)
-    {
-        if (contract.Speaker == "Matěj")
-            return "Matěj stručně reaguje podle aktuální situace.";
-        if (contract.Speaker == "Havel")
-            return "Havel odpoví věcně podle aktuální situace.";
-        return contract.Outcome;
     }
 
     private static string Bullets(IEnumerable<string> lines) =>
@@ -1012,7 +1206,7 @@ internal sealed class OllamaRenderer : INarrativeRenderer, IDisposable
     public void Dispose() => _client.Dispose();
 
     private sealed record OllamaMessage(string? Content);
-    private sealed record OllamaResponse(OllamaMessage? Message);
+    private sealed record OllamaEnvelope(OllamaMessage? Message);
 }
 
 internal sealed class GameStore : IAsyncDisposable
@@ -1128,13 +1322,15 @@ internal interface INarrativeRenderer
     Task<string> RenderAsync(SceneContract contract);
 }
 
-internal interface IIntentInterpreter
+internal interface ISemanticInterpreter
 {
-    Task<ParsedIntent?> InterpretAsync(
+    Task<SemanticCommand?> InterpretAsync(
         string input,
         WorldState state,
         string? conversationTarget,
-        List<string> availableTargets);
+        string? focusSubject,
+        List<string> visibleEntities,
+        List<string> knownEntities);
 }
 
 internal sealed class WorldState
@@ -1153,10 +1349,53 @@ internal sealed class WorldState
         MatejKnowsPlan = false,
         GrainPriceGroats = 4
     };
+
+    public WorldState CloneWithLocation(LocationId location) => new()
+    {
+        GameTime = GameTime,
+        Location = location,
+        MoneyGroats = MoneyGroats,
+        MatejKnowsPlan = MatejKnowsPlan,
+        GrainPriceGroats = GrainPriceGroats
+    };
+}
+
+internal sealed record SemanticCommand(
+    string Kind,
+    string Op,
+    string? Target,
+    string? Subject,
+    string? Predicate,
+    string? Text,
+    Dictionary<string, string> Args)
+{
+    public static SemanticCommand Query(
+        string op,
+        string? subject = null,
+        string? predicate = null,
+        Dictionary<string, string>? args = null) =>
+        new("query", op, null, subject, predicate, null, args ?? new());
+
+    public static SemanticCommand Action(
+        string op,
+        string? target = null,
+        string? subject = null,
+        string? predicate = null,
+        string? text = null,
+        Dictionary<string, string>? args = null) =>
+        new("action", op, target, subject, predicate, text, args ?? new());
+
+    public SemanticCommand Normalize() => this with
+    {
+        Kind = Kind?.Trim().ToLowerInvariant() ?? "unknown",
+        Op = Op?.Trim().ToLowerInvariant() ?? "unknown",
+        Args = Args ?? new Dictionary<string, string>()
+    };
 }
 
 internal sealed record SceneContract(
     string Title,
+    string CanonicalLocation,
     string Speaker,
     string Listener,
     string Perspective,
@@ -1165,58 +1404,42 @@ internal sealed record SceneContract(
     List<string> Forbidden,
     string Outcome);
 
-internal sealed record ParsedIntent(
-    PlayerIntent Intent,
-    string? Target,
-    string Source);
+internal sealed record KnowledgeAnswer(string Fact, string? FocusSubject);
 
-internal sealed record Resolution(
+internal sealed record ValidationResult(bool IsValid, string Message)
+{
+    public static ValidationResult Ok() => new(true, "");
+    public static ValidationResult Fail(string message) => new(false, message);
+}
+
+internal sealed record EngineResult(
     bool Accepted,
     int Minutes,
     LocationId? NewLocation,
     SceneContract? Contract,
     string EventSummary,
     string SystemMessage,
-    bool SetMatejKnowsPlan,
-    string? ConversationTarget)
+    string? DirectAnswer,
+    string? ConversationTarget,
+    string? FocusSubject,
+    bool SetMatejKnowsPlan)
 {
-    public static Resolution Ok(
+    public static EngineResult Ok(
         int minutes,
         LocationId? location,
         SceneContract contract,
         string summary,
-        bool setMatejKnowsPlan = false,
-        string? conversationTarget = null) =>
-        new(true, minutes, location, contract, summary, "", setMatejKnowsPlan, conversationTarget);
+        string? conversationTarget = null,
+        string? focusSubject = null,
+        bool setMatejKnowsPlan = false) =>
+        new(true, minutes, location, contract, summary, "", null,
+            conversationTarget, focusSubject, setMatejKnowsPlan);
 
-    public static Resolution Reject(string message) =>
-        new(false, 0, null, null, "", message, false, null);
-}
+    public static EngineResult Answer(string text) =>
+        new(true, 0, null, null, "", "", text, null, null, false);
 
-internal enum PlayerIntent
-{
-    Unknown,
-    LookAround,
-    LookRoom,
-    LookWindow,
-    InspectMatej,
-    InspectHavel,
-    GoDownstairs,
-    GoSquare,
-    GoInn,
-    TalkMatej,
-    TalkHavel,
-    GreetMatej,
-    GreetHavel,
-    AskHowAreYou,
-    AskFood,
-    OrderBreakfast,
-    AskBusy,
-    BreakfastBusy,
-    AskSecret,
-    TellPlan,
-    GoodbyeMatej,
-    BargainHalf
+    public static EngineResult Reject(string text) =>
+        new(false, 0, null, null, "", text, null, null, null, false);
 }
 
 internal enum LocationId
@@ -1224,17 +1447,6 @@ internal enum LocationId
     InnRoom = 1,
     InnCommonRoom = 2,
     MarketSquare = 3
-}
-
-internal static class LocationNames
-{
-    public static string Name(LocationId location) => location switch
-    {
-        LocationId.InnRoom => "pokoj v hostinci U Tří korun",
-        LocationId.InnCommonRoom => "společenská místnost hostince U Tří korun",
-        LocationId.MarketSquare => "rabenfeldské náměstí",
-        _ => location.ToString()
-    };
 }
 
 internal static class TextNorm
@@ -1245,7 +1457,8 @@ internal static class TextNorm
     public static string Normalize(string text)
     {
         var formD = text.ToLowerInvariant().Normalize(NormalizationForm.FormD);
-        var chars = formD.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark);
+        var chars = formD.Where(c =>
+            CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark);
         return new string(chars.ToArray()).Normalize(NormalizationForm.FormC);
     }
 }
