@@ -62,13 +62,16 @@ AI funguje jako stylistický renderer: vytváří přirozenou češtinu, dialog 
 
 ## Interpretace přirozeného vstupu
 
+Podrobněji: [Sémantické akce a dotazy nad světem](semantic-actions.md)
+
+
 Schválený princip pro vstup hráče je **AI chápe jazyk, engine chápe svět**.
 
 Vstup se zpracovává ve vrstvách:
 1. jednoduché informační dotazy nad známým stavem světa zodpoví engine přímo a bez AI;
 2. jednoznačné běžné akce rozpozná deterministický parser;
-3. nejasnější přirozený text může zpracovat samostatný AI intent interpreter, který vrací pouze strukturovaný návrh akce (např. intent a cíl), nikoli výsledek;
+3. nejasnější přirozený text může zpracovat samostatný AI sémantický interpreter, který vrací obecný strukturovaný příkaz (akce nebo dotaz, cíl, předmět a parametry), nikoli konkrétní herní intent ani výsledek;
 4. engine návrh validuje podle aktuální lokace, dostupných entit, pravidel a kanonického stavu;
 5. pouze engine provede změnu světa a sestaví Scene/Engine Contract pro narativní renderer.
 
-Intent interpreter nesmí vytvářet osoby, fakta, úspěch akce ani měnit databázi. Prototyp v0.2 používá jako pracovní rozdělení rolí Qwen3 8B pro rychlou strukturovanou interpretaci a Gemma 3 12B pro český narativní render; nejde zatím o definitivní modely distribuce.
+Sémantický interpreter nesmí vytvářet osoby, fakta, úspěch akce ani měnit databázi. Prototyp v0.3 nahrazuje rostoucí seznam pevných intentů obecným Action/Query DSL. Pracovní rozdělení rolí zůstává Qwen3 8B pro strukturovanou interpretaci a Gemma 3 12B pro český narativní render; nejde zatím o definitivní modely distribuce.
