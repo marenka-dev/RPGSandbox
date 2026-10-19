@@ -687,8 +687,11 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
               "subject":null,
               "predicate":null,
               "text":null,
-              "args":{}
+              "args":{"price":"3"}
             }
+
+            Všechny hodnoty uvnitř args zapisuj jako STRING, i když jde o číslo.
+            Pokud žádný parametr není, vrať "args":{}.
 
             Povolené ACTION op:
             observe, inspect, move_to, approach, speak, ask, tell, request, offer, wait
