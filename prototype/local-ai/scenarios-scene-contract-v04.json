@@ -1,0 +1,114 @@
+[
+  {
+    "id": "scene-rabenfeld-window",
+    "title": "Ranní Rabenfeld – Scene Contract",
+    "context": "Hráčská postava se jmenuje Pavel. Rabenfeld je město. Pavel je v pokoji hostince U Tří korun.",
+    "playerAction": "Chvíli zůstanu u okna a budu pozorovat, jak se město probouzí.",
+    "engineResult": "Akce trvá 3 herní minuty. Pavel pouze pozoruje běžný ranní provoz.",
+    "sceneFacts": [
+      "Je časné ráno.",
+      "Pavel stojí u okna pokoje v hostinci U Tří korun.",
+      "Na náměstí začíná běžný trh.",
+      "Pavel vidí stánky, několik povozů a několik měšťanů.",
+      "Neprobíhá žádná mimořádná událost.",
+      "Pavel nezíská žádnou novou důležitou informaci."
+    ],
+    "allowedFlavor": [
+      "Můžeš stručně popsat ranní světlo, běžný ruch, neurčité zvuky trhu a počasí bez konkrétních následků.",
+      "Můžeš použít jednoduché smyslové detaily, pokud nevytvoří nové osoby, podniky, zboží nebo události."
+    ],
+    "forbiddenFacts": [
+      "Nevymýšlej konkrétní druhy zboží, profese prodejců, názvy podniků, děti, vojáky ani jiné nové postavy.",
+      "Nevymýšlej významnou zprávu, pověst, konflikt nebo událost.",
+      "Neříkej, že Pavel někam dorazil; už v hostinci je."
+    ]
+  },
+  {
+    "id": "scene-breakfast",
+    "title": "Snídaně s Matějem – Scene Contract",
+    "context": "Matěj je hostinský kolem padesáti let. Pavla zná z několika návštěv. Mluví jednoduše, věcně a přátelsky.",
+    "playerAction": "Poprosím Matěje o snídani a zeptám se, jestli je dnes ve městě rušno.",
+    "engineResult": "Matěj přinese snídani a řekne pouze, že je tržní den a náměstí bývá rušnější. Rozhovor trvá 5 herních minut.",
+    "sceneFacts": [
+      "Matěj přinese Pavlovi snídani.",
+      "Konkrétní podoba snídaně není definována a nesmí být popsána.",
+      "Pavel se zeptá, zda je dnes ve městě rušno.",
+      "Matěj odpoví, že je tržní den a náměstí bývá rušnější.",
+      "Matěj nezná žádnou další relevantní zprávu."
+    ],
+    "allowedFlavor": [
+      "Matěj může udělat běžné nenápadné gesto odpovídající hostinskému, například položit snídani na stůl nebo si otřít ruce.",
+      "Dialog může být lehce hovorový, ale bez karikatury či archaizace."
+    ],
+    "forbiddenFacts": [
+      "Neuváděj žádné konkrétní jídlo ani nápoj.",
+      "Nevymýšlej, odkud přijeli obchodníci ani co prodávají.",
+      "Nevymýšlej další hosty, pověsti, politiku nebo tajemství."
+    ]
+  },
+  {
+    "id": "scene-secret-rumor",
+    "title": "Tajná dohoda – Scene Contract",
+    "context": "Matěj je opatrný hostinský. Nemá žádnou potvrzenou informaci o tajné dohodě městské rady a neví, zda vůbec existuje.",
+    "playerAction": "Řeknu Matějovi, že jsem slyšel o tajné dohodě rady, a zeptám se, co o ní ví.",
+    "engineResult": "Matěj řekne, že o žádné takové dohodě nic spolehlivého neví. Nepotvrdí její existenci. Vztah se nemění.",
+    "sceneFacts": [
+      "Jediným zdrojem informace o údajné dohodě je Pavlova otázka.",
+      "Matěj o žádné takové dohodě nic spolehlivého neví.",
+      "Matěj neví, zda taková dohoda existuje.",
+      "Matěj odmítne vydávat domněnku za fakt."
+    ],
+    "allowedFlavor": [
+      "Matěj může působit opatrně nebo stručně.",
+      "Může říct, že k tomu nemá co spolehlivého dodat."
+    ],
+    "forbiddenFacts": [
+      "Nesmíš napsat, že Matěj o dohodě také slyšel.",
+      "Nesmíš tvrdit, že po městě kolují drby nebo že rada něco tají.",
+      "Nesmíš naznačit existenci skutečného tajemství, spiknutí nebo intriky."
+    ]
+  },
+  {
+    "id": "scene-memory",
+    "title": "Paměť Matěje – Scene Contract",
+    "context": "Včera večer Pavel Matějovi řekl pouze to, že dnes dopoledne chce zajít na trh a potom na radnici.",
+    "playerAction": "Při odchodu se s Matějem rozloučím.",
+    "engineResult": "Matěj se krátce rozloučí a může navázat pouze na Pavlův plán jít na trh a potom na radnici.",
+    "sceneFacts": [
+      "Matěj si pamatuje Pavlův plán: trh a potom radnice.",
+      "Nezná účel návštěvy trhu ani radnice.",
+      "Nezná žádný další Pavlův plán."
+    ],
+    "allowedFlavor": [
+      "Může Pavlovi popřát dobrý den nebo štěstí.",
+      "Může stručně připomenout trh a radnici."
+    ],
+    "forbiddenFacts": [
+      "Nevymýšlej, co má Pavel na trhu koupit.",
+      "Nevymýšlej, co má na radnici vyřídit.",
+      "Nevymýšlej žádný další úkol nebo schůzku."
+    ]
+  },
+  {
+    "id": "scene-bargaining-failure",
+    "title": "Neúspěšné vyjednávání – Scene Contract",
+    "context": "Kupec Havel prodává obilí za 4 groše za míru. Pavla nezná. Havel je věcný obchodník, ne hrubián ani karikatura lakomce.",
+    "playerAction": "Zkusím Havla přesvědčit, aby mi prodal obilí za polovinu ceny.",
+    "engineResult": "Skrytý test vyjednávání neuspěl. Havel slušně odmítne. Cena zůstává 4 groše za míru. Vztah se nemění.",
+    "sceneFacts": [
+      "Havel odmítne nabídku prodat za polovinu.",
+      "Cena zůstává 4 groše za míru.",
+      "Havel není nepřátelský.",
+      "Vztah mezi Pavlem a Havlem se nezmění."
+    ],
+    "allowedFlavor": [
+      "Havel může nabídku stručně odmítnout a zopakovat svou cenu.",
+      "Může použít jedno běžné obchodnické gesto nebo krátkou reakci."
+    ],
+    "forbiddenFacts": [
+      "Nevysvětluj odmítnutí neexistujícím nedostatkem, drahou úrodou, válkou ani jinou příčinou.",
+      "Nevymýšlej množstevní slevy, věrnostní výhody ani další nabídky.",
+      "Nezmiňuj hod kostkou, test, atribut ani herní mechaniku."
+    ]
+  }
+]
