@@ -323,6 +323,8 @@ internal sealed class GameEngine
             "tell" => ResolveTell(state, target, command),
             "request" => ResolveRequest(state, target, subject, command),
             "offer" => ResolveOffer(state, target, subject, command),
+            "take" => ResolveTake(state, command),
+            "put" => ResolvePut(state, command),
             "wait" => ResolveWait(state, command),
             _ => EngineResult.Reject(
                 $"Engine rozumí významu „{command.Op}“, ale zatím pro tuto obecnou operaci nemá pravidla. Svět se nezměnil.")
@@ -457,27 +459,47 @@ internal sealed class GameEngine
             setPlan);
     }
 
-    private static EngineResult ResolveRequest(
+    private EngineResult ResolveRequest(
         WorldState state,
         string? target,
         string? subject,
         SemanticCommand command)
     {
         target ??= WorldData.DefaultConversationTarget(state.Location);
+        var requested = TextNorm.Normalize(subject ?? command.Text ?? "");
 
         if (target == "Matěj" && state.Location == LocationId.InnCommonRoom &&
-            TextNorm.Normalize(subject ?? command.Text ?? "").Contains("snidan"))
+            requested.Contains("snidan"))
         {
             return EngineResult.Ok(
                 4,
                 null,
                 SceneContracts.Breakfast(state),
-                "Matěj přinesl Pavlovi snídani.",
+                "Matěj přinesl hráči snídani.",
                 "Matěj",
                 "snídaně");
         }
 
-        return EngineResult.Reject("Požadavek je srozumitelný, ale engine pro něj zatím nemá obecné pravidlo v této situaci.");
+        if (target == "Matěj" && state.Location == LocationId.InnCommonRoom &&
+            requested.Contains("piv"))
+        {
+            var offeringId = _world.EnsureInnBeer();
+            var price = _world.OfferingPrice("pivo", state) ?? 1;
+
+            if (state.MoneyGroats < price)
+                return EngineResult.Reject($"Na {_world.OfferingName(offeringId)} nemáš dost peněz.");
+
+            state.MoneyGroats -= price;
+            return EngineResult.Ok(
+                2,
+                null,
+                SceneContracts.ServicePurchase(state, _world.OfferingName(offeringId), price),
+                $"Hráč si objednal {_world.OfferingName(offeringId)} za {price} groš.",
+                "Matěj",
+                "pivo");
+        }
+
+        return EngineResult.Reject("Požadavek je srozumitelný, ale současné vlastnosti entit neumožňují bezpečně určit jeho provedení.");
     }
 
     private static EngineResult ResolveOffer(
@@ -517,6 +539,33 @@ internal sealed class GameEngine
                 : $"Havel odmítl nabídnutou cenu {offeredPrice} grošů za míru.",
             "Havel",
             "obilí");
+    }
+
+    private EngineResult ResolveTake(WorldState state, SemanticCommand command)
+    {
+        if (!_world.TryTake(command.Subject, state, out var message))
+            return EngineResult.Reject(message);
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.GenericPhysicalAction(state, message),
+            message,
+            focusSubject: command.Subject);
+    }
+
+    private EngineResult ResolvePut(WorldState state, SemanticCommand command)
+    {
+        command.Args.TryGetValue("purpose", out var purpose);
+        if (!_world.TryPut(command.Subject, command.Target, purpose, state, out var message))
+            return EngineResult.Reject(message);
+
+        return EngineResult.Ok(
+            1,
+            null,
+            SceneContracts.GenericPhysicalAction(state, message),
+            message,
+            focusSubject: command.Subject);
     }
 
     private static EngineResult ResolveWait(WorldState state, SemanticCommand command)
@@ -566,6 +615,21 @@ internal static class FastSemanticParser
         if (TextNorm.ContainsAny(n, "koho znam"))
             return SemanticCommand.Query("known_people");
 
+        if (TextNorm.ContainsAny(n, "co mam u sebe", "jake mam veci", "mam jeste jine veci"))
+            return SemanticCommand.Query("inventory");
+
+        if (TextNorm.ContainsAny(n, "jak vypadam", "kdo jsem"))
+            return SemanticCommand.Query("describe", subject: "player");
+
+        if (n.StartsWith("kdo je "))
+            return SemanticCommand.Query("describe", subject: input[7..].Trim(' ', '?', '.', '!'));
+
+        if (n.StartsWith("vidim "))
+            return SemanticCommand.Query("can_perceive", subject: input[6..].Trim(' ', '?', '.', '!'));
+
+        if (TextNorm.ContainsAny(n, "co vidim", "co je tady", "co je tu"))
+            return SemanticCommand.Query("contents");
+
         if (n.StartsWith("kde je "))
             return SemanticCommand.Query("location_of", subject: input[7..].Trim(' ', '?', '.', '!'));
 
@@ -596,6 +660,15 @@ internal static class FastSemanticParser
 
         if (TextNorm.ContainsAny(n, "poprosim", "pozadam") && n.Contains("snidan"))
             return SemanticCommand.Action("request", target: conversationTarget ?? "Matěj", subject: "snídaně");
+
+        if (TextNorm.ContainsAny(n, "dam si pivo", "objednam pivo", "chci pivo"))
+            return SemanticCommand.Action("request", target: conversationTarget ?? "Matěj", subject: "pivo");
+
+        if (TextNorm.ContainsAny(n, "vezmu ", "zvednu "))
+        {
+            var subject = input[(input.IndexOf(' ') + 1)..].Trim(' ', '.', '?', '!');
+            return SemanticCommand.Action("take", subject: subject);
+        }
 
         if (conversationTarget == "Havel" && focusSubject == "obilí")
         {
@@ -683,11 +756,11 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
             Pokud žádný parametr není, vrať "args":{}.
 
             Povolené ACTION op:
-            observe, inspect, move_to, approach, speak, ask, tell, request, offer, wait
+            observe, inspect, move_to, approach, speak, ask, tell, request, offer, take, put, wait
 
             Povolené QUERY op:
-            current_location, time, money, known_people, visible_people,
-            location_of, exists_here, property, available_social_contact
+            current_location, time, money, inventory, known_people, visible_people,
+            describe, can_perceive, contents, location_of, exists_here, property, available_social_contact
 
             Zásady:
             - Neodhaduj výsledek akce.
@@ -698,6 +771,14 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
             - Zájmena řeš z CURRENT CONVERSATION a FOCUS SUBJECT.
             - "Půjdu za X" je move_to s target X.
             - "Kde je X" je query location_of se subject X.
+            - "Kdo je X" nebo "Jak vypadá X" je query describe.
+            - "Vidím X?" je query can_perceive.
+            - "Co mám u sebe?" je query inventory.
+            - "Co vidím?" je query contents.
+            - "Dám si pivo" je action request se subject "pivo"; nevymýšlej cenu.
+            - "Vezmu židli" je action take se subject "židle".
+            - "Dám židli ke dveřím" je action put, subject "židle", target "dveře".
+            - Pokud hráč výslovně říká účel jako "zablokuju dveře", dej args.purpose="block".
             - Otázka NPC je action ask, nikoli world query, pokud se hráč ptá konkrétní postavy.
             - Pokud význam nejde bezpečně vyjádřit povolenými operacemi, vrať unknown.
             """;
@@ -760,13 +841,13 @@ internal static class SemanticValidator
     private static readonly HashSet<string> ActionOps =
     [
         "observe", "inspect", "move_to", "approach", "speak",
-        "ask", "tell", "request", "offer", "wait"
+        "ask", "tell", "request", "offer", "take", "put", "wait"
     ];
 
     private static readonly HashSet<string> QueryOps =
     [
-        "current_location", "time", "money", "known_people", "visible_people",
-        "location_of", "exists_here", "property", "available_social_contact"
+        "current_location", "time", "money", "inventory", "known_people", "visible_people",
+        "describe", "can_perceive", "contents", "location_of", "exists_here", "property", "available_social_contact"
     ];
 
     public static ValidationResult Validate(SemanticCommand command, WorldState state)
@@ -779,13 +860,6 @@ internal static class SemanticValidator
 
         if (command.Kind is not ("action" or "query"))
             return ValidationResult.Fail("Neplatný typ sémantického příkazu.");
-
-        var target = WorldData.CanonicalEntity(command.Target);
-        if (command.Target is not null && target is null &&
-            command.Op is not ("move_to" or "exists_here" or "property"))
-        {
-            return ValidationResult.Fail("Cíl příkazu neodpovídá žádné známé nebo dostupné entitě.");
-        }
 
         return ValidationResult.Ok();
     }
@@ -1055,6 +1129,26 @@ internal static class SceneContracts
         ["Matěj může snídani položit před hráče."],
         ["Konkrétní jídlo.", "Konkrétní cena.", "Další hosté.", "Jiná lokace."],
         "Hráč dostane snídani.");
+
+    public static SceneContract ServicePurchase(
+        WorldState s, string itemName, int price) => Contract(
+        s, "Nákup v hostinci", "Matěj", "PLAYER", "dialogue",
+        [
+            $"Hostinec U Tří korun kanonicky nabízí položku {itemName}.",
+            $"Cena je {price} groš.",
+            $"Hráč zaplatil {price} groš a položku dostal."
+        ],
+        ["Matěj může objednávku stručně potvrdit."],
+        ["Jiná cena.", "Jiný nápoj.", "Další hosté.", "Jiná lokace."],
+        "Objednávka byla provedena podle kanonické nabídky hostince.");
+
+    public static SceneContract GenericPhysicalAction(
+        WorldState s, string result) => Contract(
+        s, "Fyzická akce", "NARRATOR", "PLAYER", "second_person",
+        [$"Kanonický výsledek fyzické akce: {result}"],
+        ["Akci popiš jednou stručnou větou."],
+        ["Nové objekty.", "Nové osoby.", "Jiná lokace.", "Další následky, které engine neurčil."],
+        result);
 
     public static SceneContract AskForBetterPrice(WorldState s) => Contract(
         s, "Jednání o ceně", "Havel", "PLAYER", "dialogue",
