@@ -1,106 +1,77 @@
-# RPGSandbox – Rabenfeld vertical slice v0.4 World Graph & Concretization
+# RPGSandbox – Rabenfeld vertical slice v0.5 Location Graph, Services & Knowledge Routing
 
-v0.4 propojuje sémantické akce s persistentním **World Graphem**. Cílem je, aby engine nereagoval na konkrétní věty ručně napsanými odpověďmi, ale pracoval s obecnými entitami, vlastnostmi a vztahy.
+v0.5 rozšiřuje World Graph o **topologii lokací, obsah místností, služby podniků a směrování znalostí NPC**. Cíl není přidávat další pevné věty, ale dát enginu bohatší strukturu světa, nad kterou lze klást obecné otázky.
 
-## Základní vrstvy
+## Co je nové
 
-1. **Objektivní svět** – kanonické entity a fakta.
-2. **Lazy detail** – dosud neurčené detaily lze konkretizovat pouze v mezích už existujícího světa.
-3. **Znalosti hráče** – samostatná vrstva toho, co hráč skutečně ví.
-4. **Semantic Actions / Queries** – jazyková vrstva nad světem.
-5. **Scene Contract** – Gemma pouze odvypráví výsledek enginu.
+### Location Graph
 
-## World Graph
-
-SQLite nyní obsahuje mimo původní save také:
+Hostinec už není jen jedna lokace. World Graph zná vazby:
 
 ```text
-world_entities
-world_facts
-player_knowledge
+U Tří korun
+  contains_location -> společenská místnost
+  contains_location -> pokoj
+
+společenská místnost
+  adjacent_to -> pokoj
+  adjacent_to -> ulice před hostincem
+
+pokoj
+  adjacent_to -> společenská místnost
 ```
 
-Příklady objektivních vztahů:
+Lokace obsahují konkrétní objekty a nábytek, například stůl, židle, okno a dveře.
+
+Díky tomu mohou dotazy typu:
 
 ```text
-Matěj --profession--> hostinský
-Matěj --location--> U Tří korun
-Havel --profession--> kupec
-Havel --sells--> obilí
-Havel --price:obilí--> 4
-židle --carryable--> true
-dveře --blockable--> true
+Jak vypadá místnost?
+Jaký je zde nábytek?
+Jsou v budově další místnosti?
+Jsou zde dveře?
+Jsou zde okna?
+Jak se dostanu z hostince?
 ```
 
-Objektivní fakt automaticky neznamená, že jej hráč zná.
+pracovat nad grafem světa místo nad ručně napsanou odpovědí.
 
-## Lazy concretization
+### Services
 
-v0.4 obsahuje dva malé experimenty.
-
-### Nabídka hostince
-
-Hostinec má od začátku makro-vlastnost:
+Hostinec má obecné služby:
 
 ```text
-service_category = food_and_drink
-ordinary_medieval_inn = true
+U Tří korun --service_category--> food_and_drink
+U Tří korun --offers--> běžná snídaně
 ```
 
-Pokud hráč poprvé řeší pivo, engine může z tohoto rámce konkretizovat persistentní nabídku:
+Běžná snídaně může zpočátku existovat pouze jako abstraktní nabídka. Teprve při dotazu na její složení ji engine bezpečně konkretizuje a výsledek uloží natrvalo.
+
+Pivo funguje stejným principem lazy concretization: AI cenu ani existenci neurčuje.
+
+### Knowledge routing NPC
+
+Matěj už není jen sada několika ručně napsaných odpovědí. Pokud se hráč ptá na služby hostince, Matějova odpověď se skládá z World Graphu hostince.
+
+Například:
 
 ```text
-pivo U Tří korun
-category = beer
-price_groats = 1
-offered_at = U Tří korun
+Co mi můžeš nabídnout?
+Máte jídelní lístek?
+Co obsahuje běžná snídaně?
 ```
 
-Od této chvíle je existence i cena kanonická a uložená v databázi. AI cenu nevymýšlí.
+se směrují na fakta podniku a jeho nabídku.
 
-### Dosud anonymní obyvatel
+### Dialog má přednost v aktivní konverzaci
 
-Tržiště má makro-vrstvu obyvatel. Při požadavku na nový sociální kontakt může concretizer vytvořit persistentní NPC z tohoto populačního rámce. Prototyp používá deterministický první příklad, aby šlo ověřit perzistenci.
-
-## Obecnější dotazy
-
-Nové query operace zahrnují také:
+Pokud hráč právě mluví s Matějem, věta:
 
 ```text
-inventory
-describe
-can_perceive
-contents
+Jak se dnes máš?
 ```
 
-Takže věty jako:
-
-```text
-Co mám u sebe?
-Kdo je Havel?
-Vidím Havla?
-Co vidím?
-```
-
-už míří na World Graph místo na ručně vybranou odpověď.
-
-## Affordances
-
-v0.4 zavádí první dvě fyzické operace:
-
-```text
-take
-put
-```
-
-Předměty mají schopnosti jako:
-
-```text
-židle --carryable--> true
-dveře --blockable--> true
-```
-
-Engine tedy může rozhodovat podle vlastností objektů, ne podle přesné věty hráče.
+se interpretuje jako dialogová otázka Matějovi, nikoli jako obecný query dotaz do World Graphu.
 
 ## Spuštění
 
@@ -111,34 +82,37 @@ dotnet restore
 dotnet run -- --model gemma3:12b --intent-model qwen3:8b
 ```
 
-Doporučený čistý test:
+Pro čistý test v0.5 použij:
 
 ```text
 reset
 ```
 
-Pak zkus přirozeně například:
+## Doporučený playtest
 
 ```text
-Co mám u sebe?
-Jak vypadám?
-Kde je Matěj?
-Půjdu za Havlem.
-Vidím Havla?
-Kdo je Havel?
-Půjdu za Matějem.
-Prodávají zde pivo a kolik stojí?
-Dám si pivo.
-Kolik mám peněz?
-Půjdu do pokoje.
-Vezmu židli.
-Co mám u sebe?
+Rozhlédnu se po místnosti.
+Jak vypadá místnost?
+Jaký je zde nábytek?
+Jsou v budově i další místnosti?
+Jsou zde dveře?
+Jsou zde okna?
+Jak se dostanu z hostince?
+Pozdravím Matěje.
+Jak se dnes máš?
+Co mi můžeš nabídnout?
+Máte jídelní lístek?
+Co obsahuje běžná snídaně?
+Prodáváte pivo?
+Kolik stojí?
 ```
 
-## Co v0.4 ještě není
+Pak pokračuj úplně volně.
 
-World Graph je zatím malý prototypový model, ne kompletní obecný simulační svět. Concretizer má pouze několik bezpečných pravidel. Dlouhodobě nesmí generovat detail libovolně; vždy musí vycházet z makrosvěta, historie, kultury, ekonomiky, populace a dalších již kanonických omezení.
+## Architektonický smysl
 
-Zásadní pravidlo:
+v0.5 ověřuje, že pružnost hry má vyrůstat z bohatého modelu světa:
 
-> **Otázka hráče nevytváří svět. Pouze může vyvolat konkretizaci detailu, který byl dosud neurčený, ale musí být slučitelný s již existujícím světem.**
+**entity + vztahy + služby + affordances + znalosti**
+
+nikoliv z nekonečného seznamu textových intentů.
