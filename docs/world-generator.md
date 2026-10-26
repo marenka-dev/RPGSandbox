@@ -374,3 +374,109 @@ lidé
 ### Hranice v0.4
 
 v0.4 ještě nesimuluje zásoby, ceny, mzdy, peněžní toky ani skutečné přepravy. Tyto vrstvy mají navázat až na ověřenou populační a produkční strukturu.
+
+
+## Hierarchie prostoru a lokální scéna
+
+Regionální buňka není vždy konečná herní scéna.
+
+Zásadní pravidlo:
+
+> **Kontextové akce se generují pouze z aktuálně vnímatelné lokální scény, ne ze všech entit celé regionální buňky.**
+
+Hierarchie prostoru:
+
+```text
+WORLD
+→ REGION
+→ REGION CELL
+→ SETTLEMENT
+→ DISTRICT
+→ STREET / SQUARE / BUILDING
+→ ROOM / LOCAL SCENE
+→ VISIBLE ENTITIES
+→ CONTEXT ACTIONS
+```
+
+### Jednoduchá krajina
+
+Lesní, polní nebo horská regionální buňka může být dostatečně jednoduchá, aby přímo poskytla lokální scénu.
+
+Příklad:
+
+```text
+region cell
+- les
+- cesta
+- padlý kmen
+- potok
+
+→ přímo lokální scéna
+```
+
+### Sídlo jako vstup do další úrovně detailu
+
+Pokud regionální buňka obsahuje město nebo vesnici, hráč nevstupuje do abstraktního seznamu všech obyvatel a podniků.
+
+Městská buňka odkazuje na vlastní prostorovou strukturu:
+
+```text
+Settlement
+├─ gates / entry points
+├─ districts
+├─ streets
+├─ squares
+├─ buildings
+└─ local scenes
+```
+
+Směr příchodu určí konkrétní vstupní bod. Příchod po východní cestě může například vytvořit aktuální scénu „Východní brána“, nikoli „celé město“.
+
+### Strukturální existence vs. detail
+
+Sídlo musí předem existovat strukturálně. Worldgen může znát například:
+
+- počet a hranice čtvrtí;
+- uliční síť;
+- náměstí;
+- brány;
+- budovy;
+- podniky;
+- domácnosti;
+- základní funkci budov a jejich vlastnictví.
+
+Detail interiéru konkrétní budovy nebo místnosti se může doplnit před vstupem hráče, ale pouze v rámci již existující struktury.
+
+Lazy concretization tedy smí doplňovat detail, nikoli dodatečně vytvářet existenci významné budovy, podniku nebo instituce jen proto, že se na ni hráč zeptal.
+
+### Viditelnost lidí a podniků
+
+To, že ve městě existuje 1 000 obyvatel a desítky podniků, neznamená, že jsou všichni součástí aktuální scény.
+
+Engine pracuje s prostorovou a časovou distribucí:
+
+```text
+population of settlement
+→ current schedules / aggregate presence
+→ population in district
+→ people in local scene
+→ visible / interactable people
+```
+
+Běžná populace může být mimo hráčovu relevanci agregovaná. Při vstupu do konkrétní scény engine vybere skutečné persistentní osoby konzistentní s jejich domácností, profesí, časem a místem.
+
+### Znalostní filtr
+
+UI nesmí automaticky nabídnout všechny existující podniky nebo osoby ve městě.
+
+Cílové akce typu „Jít ke kovárně“ se nabídnou pouze tehdy, pokud je místo hráči známé, právě viditelné nebo jej lze rozumně odvodit z aktuálního kontextu.
+
+Tím se zachovává oddělení:
+
+```text
+objective world truth
+≠
+player knowledge
+≠
+current perception
+```
