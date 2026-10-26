@@ -37,7 +37,7 @@ internal static class Program
 
     private static void PrintSummary(GeneratedWorld world, string output)
     {
-        Console.WriteLine("RPGSandbox – World Generator v0.3 Spatial Region");
+        Console.WriteLine("RPGSandbox – World Generator v0.4 Population & Economy");
         Console.WriteLine($"Seed: {world.Config.Seed}");
         Console.WriteLine($"Éra: {world.Config.Era}");
         Console.WriteLine($"Climate bias: {world.Config.ClimateBias}");
@@ -51,10 +51,6 @@ internal static class Program
             Console.WriteLine($"REGION: {region.Name}");
             Console.WriteLine($"  Mapa: {region.Width} x {region.Height} buněk");
             Console.WriteLine($"  Klima: {region.Climate}");
-            Console.WriteLine($"  Úrodnost průměr: {region.Fertility}/100");
-            Console.WriteLine($"  Lesnatost průměr: {region.ForestCover}/100");
-            Console.WriteLine($"  Voda průměr: {region.WaterAvailability}/100");
-            Console.WriteLine($"  Obchodní průchodnost: {region.TradeAccess}/100");
             Console.WriteLine($"  Populace celkem: {region.Population}");
             Console.WriteLine($"    v hlavních sídlech: {region.PopulationBreakdown.Settled}");
             Console.WriteLine($"    rozptýlené venkovské domácnosti: {region.PopulationBreakdown.RuralHouseholds}");
@@ -64,22 +60,20 @@ internal static class Program
         }
 
         Console.WriteLine();
-        Console.WriteLine("SÍDLA:");
+        Console.WriteLine("SÍDLA A EKONOMIKA:");
         foreach (var settlement in world.Settlements.OrderByDescending(x => x.Population))
         {
-            Console.WriteLine(
-                $"- {settlement.Name} ({settlement.Type}) [{settlement.X},{settlement.Y}], pop. {settlement.Population}");
-            Console.WriteLine($"    místní zdroje: {string.Join(", ", settlement.LocalResources)}");
-            Console.WriteLine($"    specializace: {string.Join(", ", settlement.EconomicSpecializations)}");
-        }
+            var economy = world.SettlementEconomies.Single(x => x.SettlementId == settlement.Id);
+            var households = world.Households.Count(x => x.SettlementId == settlement.Id);
+            var householdPeople = world.Households.Where(x => x.SettlementId == settlement.Id).Sum(x => x.MemberCount);
 
-        Console.WriteLine();
-        Console.WriteLine("CESTY:");
-        foreach (var road in world.Roads)
-        {
-            var from = world.Settlements.Single(x => x.Id == road.FromSettlementId).Name;
-            var to = world.Settlements.Single(x => x.Id == road.ToSettlementId).Name;
-            Console.WriteLine($"- {from} ↔ {to}, délka {road.LengthCells} buněk");
+            Console.WriteLine($"- {settlement.Name} ({settlement.Type}) [{settlement.X},{settlement.Y}], pop. {settlement.Population}");
+            Console.WriteLine($"    domácnosti: {households}, obyvatel v domácnostech: {householdPeople}");
+            Console.WriteLine($"    místní zdroje: {string.Join(", ", settlement.LocalResources)}");
+            Console.WriteLine($"    potřeby: {string.Join(", ", economy.Demands.Select(x => $"{x.Resource}:{x.Amount}"))}");
+            Console.WriteLine($"    produkce: {string.Join(", ", economy.Production.Select(x => $"{x.Resource}:{x.Amount}"))}");
+            Console.WriteLine($"    bilance: {string.Join(", ", economy.Balances.Select(x => $"{x.Resource}:{x.Amount:+0;-0;0}"))}");
+            Console.WriteLine($"    pracovní poptávka: {string.Join(", ", economy.JobDemand.Select(x => $"{x.Profession}:{x.WorkersNeeded}"))}");
         }
 
         Console.WriteLine();
@@ -87,13 +81,16 @@ internal static class Program
         foreach (var business in world.Businesses)
         {
             var settlement = world.Settlements.Single(x => x.Id == business.SettlementId);
-            Console.WriteLine($"- {business.Name} / {business.Type} / {settlement.Name}");
+            Console.WriteLine(
+                $"- {business.Name} / {business.Type} / {settlement.Name} / " +
+                $"pracovníci {business.RequiredWorkers} / kapacita {business.Capacity}");
         }
 
         Console.WriteLine();
+        Console.WriteLine($"Domácnosti: {world.Households.Count}");
+        Console.WriteLine($"Lehké persistentní osoby: {world.People.Count}");
+        Console.WriteLine($"Významné postavy: {world.Characters.Count}");
         Console.WriteLine($"Frakce: {world.Factions.Count}");
-        Console.WriteLine($"Rodiny: {world.Families.Count}");
-        Console.WriteLine($"Postavy: {world.Characters.Count}");
         Console.WriteLine($"Historické události: {world.History.Count}");
 
         Console.WriteLine();
@@ -149,8 +146,8 @@ internal static class WorldGenerator
     {
         var geographyRng = RngStreams.For(config.Seed, "geography");
         var settlementRng = RngStreams.For(config.Seed, "settlements");
-        var economyRng = RngStreams.For(config.Seed, "economy");
         var populationRng = RngStreams.For(config.Seed, "population");
+        var economyRng = RngStreams.For(config.Seed, "economy");
         var politicsRng = RngStreams.For(config.Seed, "politics");
         var historyRng = RngStreams.For(config.Seed, "history");
         var sceneRng = RngStreams.For(config.Seed, "scene");
@@ -160,14 +157,17 @@ internal static class WorldGenerator
         var roads = GenerateRoads(settlementRng, settlements);
         ApplyRoadsToSettlements(settlements, roads);
 
-        var businesses = GenerateBusinesses(economyRng, regions, settlements);
-        var families = GenerateFamilies(populationRng, settlements);
-        var characters = GenerateCharacters(populationRng, families, settlements, businesses);
+        var households = GenerateHouseholds(populationRng, settlements);
+        var people = GeneratePeople(populationRng, households, settlements);
+        var economies = GenerateSettlementEconomies(economyRng, settlements);
+        var businesses = GenerateBusinesses(economyRng, settlements, economies);
+        AssignHouseholdOccupations(populationRng, households, economies);
+        var characters = GenerateImportantCharacters(populationRng, households, people, settlements);
         businesses = AssignBusinessOwners(populationRng, businesses, characters);
 
         var factions = GenerateFactions(politicsRng, config, settlements);
         characters = AssignFactionMemberships(politicsRng, characters, factions);
-        var relationships = GenerateRelationships(populationRng, characters, families);
+        var relationships = GenerateRelationships(populationRng, characters);
         var history = GenerateHistory(historyRng, config, settlements, factions);
         var start = GenerateStartScene(sceneRng, regions, settlements, roads);
 
@@ -177,8 +177,10 @@ internal static class WorldGenerator
             regions,
             settlements,
             roads,
+            households,
+            people,
+            economies,
             factions,
-            families,
             characters,
             businesses,
             relationships,
@@ -248,14 +250,12 @@ internal static class WorldGenerator
         var hamlets = (int)Math.Round(remainder * 0.20);
         var isolated = remainder - rural - hamlets;
 
-        var climate = ClimateFrom(temperatureBase, moistureBase);
-
         return
         [
             new Region(
                 "region.1",
                 GenerateRegionName(rng),
-                climate,
+                ClimateFrom(temperatureBase, moistureBase),
                 population,
                 avgFertility,
                 avgForest,
@@ -280,11 +280,7 @@ internal static class WorldGenerator
             var count = Math.Clamp(region.Population / 3000, 3, 9);
             var candidates = region.Cells
                 .Where(c => !c.HasRiver)
-                .Select(c => new
-                {
-                    Cell = c,
-                    Score = SettlementSuitability(c, region)
-                })
+                .Select(c => new { Cell = c, Score = SettlementSuitability(c, region) })
                 .OrderByDescending(x => x.Score)
                 .ToList();
 
@@ -309,8 +305,6 @@ internal static class WorldGenerator
 
                 var population = PopulationForSettlement(rng, type, selected, region);
                 var localResources = ResourcesAround(region, selected.X, selected.Y, 2);
-                var specializations = DeriveSettlementSpecializations(selected, localResources, type);
-                var landmarks = DeriveLandmarks(type, specializations);
 
                 result.Add(new Settlement(
                     $"settlement.{id++}",
@@ -320,10 +314,9 @@ internal static class WorldGenerator
                     population,
                     selected.X,
                     selected.Y,
-                    landmarks,
+                    DeriveLandmarks(type, localResources),
                     [],
-                    localResources,
-                    specializations));
+                    localResources));
             }
 
             RebalanceSettlementPopulation(region, result.Where(x => x.RegionId == region.Id).ToList());
@@ -346,23 +339,17 @@ internal static class WorldGenerator
 
             while (connected.Count < local.Count)
             {
-                var options =
-                    from a in local
-                    where connected.Contains(a.Id)
-                    from b in local
-                    where !connected.Contains(b.Id)
-                    let distance = Distance(a.X, a.Y, b.X, b.Y)
-                    orderby distance
-                    select new { A = a, B = b, Distance = distance };
+                var best =
+                    (from a in local
+                     where connected.Contains(a.Id)
+                     from b in local
+                     where !connected.Contains(b.Id)
+                     let distance = Distance(a.X, a.Y, b.X, b.Y)
+                     orderby distance
+                     select new { A = a, B = b }).First();
 
-                var best = options.First();
                 var path = StraightPath(best.A.X, best.A.Y, best.B.X, best.B.Y);
-                roads.Add(new Road(
-                    $"road.{id++}",
-                    best.A.Id,
-                    best.B.Id,
-                    path.Count,
-                    path));
+                roads.Add(new Road($"road.{id++}", best.A.Id, best.B.Id, path.Count, path));
                 connected.Add(best.B.Id);
             }
 
@@ -370,6 +357,7 @@ internal static class WorldGenerator
             {
                 var a = local[0];
                 var b = local.OrderByDescending(s => Distance(a.X, a.Y, s.X, s.Y)).First();
+
                 if (!roads.Any(r => Connects(r, a.Id, b.Id)))
                 {
                     var path = StraightPath(a.X, a.Y, b.X, b.Y);
@@ -384,94 +372,39 @@ internal static class WorldGenerator
     private static void ApplyRoadsToSettlements(List<Settlement> settlements, List<Road> roads)
     {
         foreach (var settlement in settlements)
-        {
             foreach (var road in roads.Where(r =>
                          r.FromSettlementId == settlement.Id || r.ToSettlementId == settlement.Id))
                 settlement.Connections.Add(road.Id);
-        }
     }
 
-    private static List<Business> GenerateBusinesses(
-        Random rng,
-        List<Region> regions,
-        List<Settlement> settlements)
+    private static List<Household> GenerateHouseholds(Random rng, List<Settlement> settlements)
     {
-        var result = new List<Business>();
+        var result = new List<Household>();
         var id = 1;
 
         foreach (var settlement in settlements)
         {
-            var local = settlement.LocalResources;
-
-            void Add(string type, string goods, int count)
+            var remaining = settlement.Population;
+            while (remaining > 0)
             {
-                for (var n = 0; n < count; n++)
-                    result.Add(new Business(
-                        $"business.{id++}",
-                        GenerateBusinessName(rng, settlement.Name, type),
-                        type,
-                        settlement.Id,
-                        "",
-                        [],
-                        goods.Split('|').ToList()));
-            }
+                var desired = rng.Next(2, 7);
+                var members = Math.Min(desired, remaining);
+                remaining -= members;
 
-            if (local.Contains("obilí"))
-            {
-                Add("farm", "obilí", Math.Max(1, settlement.Population / 450));
-                if (local.Contains("říční voda") && settlement.Population >= 220)
-                    Add("mill", "mouka|mletí obilí", Math.Max(1, settlement.Population / 1900));
-                if (settlement.Population >= 500)
-                    Add("bakery", "chléb|pečivo", Math.Max(1, settlement.Population / 1800));
-            }
-
-            if (local.Contains("dřevo"))
-            {
-                Add("woodcutter", "dřevo", Math.Max(1, settlement.Population / 1000));
-                if (settlement.Population >= 350)
-                    Add("carpenter", "nábytek|tesařské práce", Math.Max(1, settlement.Population / 1600));
-            }
-
-            if (local.Contains("železná ruda") && settlement.Population >= 280)
-                Add("smithy", "kovářské výrobky|nástroje", Math.Max(1, settlement.Population / 1800));
-
-            if (local.Contains("ryby") && settlement.Population >= 120)
-                Add("fishery", "ryby", Math.Max(1, settlement.Population / 1400));
-
-            if (settlement.Population >= 250)
-                Add("inn", "ubytování|jídlo|pití", Math.Max(1, settlement.Population / 2400));
-
-            if (settlement.Type is "town" or "market_town")
-            {
-                Add("merchant", "dovoz|vývoz", Math.Max(1, settlement.Population / 2200));
-                Add("market_stall", "místní zboží", Math.Max(1, settlement.Population / 1300));
-            }
-        }
-
-        return result;
-    }
-
-    private static List<Family> GenerateFamilies(Random rng, List<Settlement> settlements)
-    {
-        var result = new List<Family>();
-        var id = 1;
-
-        foreach (var settlement in settlements)
-        {
-            var importantHouseholds = Math.Clamp(settlement.Population / 160, 3, 14);
-
-            for (var i = 0; i < importantHouseholds; i++)
-            {
+                var socialClassRoll = rng.NextDouble();
                 var socialClass =
-                    i == 0 && settlement.Type is "town" or "market_town"
-                        ? "elite"
-                        : rng.NextDouble() < 0.20 ? "merchant" : "common";
+                    settlement.Type is "town" or "market_town" && socialClassRoll < 0.05 ? "elite" :
+                    socialClassRoll < 0.22 ? "artisan" :
+                    socialClassRoll < 0.35 ? "merchant" :
+                    "common";
 
-                result.Add(new Family(
-                    $"family.{id++}",
-                    $"Rodina {GenerateSurname(rng)}",
+                result.Add(new Household(
+                    $"household.{id++}",
                     settlement.Id,
+                    members,
                     socialClass,
+                    "",
+                    0,
                     []));
             }
         }
@@ -479,36 +412,251 @@ internal static class WorldGenerator
         return result;
     }
 
-    private static List<Character> GenerateCharacters(
+    private static List<PersonStub> GeneratePeople(
         Random rng,
-        List<Family> families,
+        List<Household> households,
+        List<Settlement> settlements)
+    {
+        var result = new List<PersonStub>();
+        var id = 1;
+
+        foreach (var household in households)
+        {
+            for (var i = 0; i < household.MemberCount; i++)
+            {
+                var age = i == 0
+                    ? rng.Next(24, 66)
+                    : rng.NextDouble() < 0.40 ? rng.Next(0, 16) : rng.Next(16, 66);
+
+                result.Add(new PersonStub(
+                    $"person.stub.{id++}",
+                    GenerateGivenName(rng),
+                    age,
+                    household.Id,
+                    household.SettlementId));
+            }
+        }
+
+        return result;
+    }
+
+    private static List<SettlementEconomy> GenerateSettlementEconomies(
+        Random rng,
+        List<Settlement> settlements)
+    {
+        var result = new List<SettlementEconomy>();
+
+        foreach (var settlement in settlements)
+        {
+            var demands = new List<ResourceAmount>
+            {
+                new("food", settlement.Population * 10),
+                new("fuel", settlement.Population * 3),
+                new("clothing", Math.Max(1, settlement.Population / 2)),
+                new("tools", Math.Max(1, settlement.Population / 5))
+            };
+
+            var production = new List<ResourceAmount>();
+
+            if (settlement.LocalResources.Contains("obilí"))
+                production.Add(new("food", settlement.Population * rng.Next(7, 14)));
+
+            if (settlement.LocalResources.Contains("ryby"))
+                AddProduction(production, "food", settlement.Population * rng.Next(1, 4));
+
+            if (settlement.LocalResources.Contains("dřevo"))
+                production.Add(new("fuel", settlement.Population * rng.Next(3, 7)));
+
+            if (settlement.LocalResources.Contains("dřevo"))
+                production.Add(new("tools", Math.Max(1, settlement.Population / rng.Next(5, 9))));
+
+            if (settlement.LocalResources.Contains("železná ruda"))
+                AddProduction(production, "tools", Math.Max(1, settlement.Population / rng.Next(3, 6)));
+
+            var balances = demands
+                .Select(d =>
+                {
+                    var produced = production.Where(p => p.Resource == d.Resource).Sum(p => p.Amount);
+                    return new ResourceAmount(d.Resource, produced - d.Amount);
+                })
+                .ToList();
+
+            var jobs = GenerateJobDemand(settlement, demands, production);
+
+            result.Add(new SettlementEconomy(
+                settlement.Id,
+                demands,
+                production,
+                balances,
+                jobs));
+        }
+
+        return result;
+    }
+
+    private static List<JobDemand> GenerateJobDemand(
+        Settlement settlement,
+        List<ResourceAmount> demand,
+        List<ResourceAmount> production)
+    {
+        var jobs = new List<JobDemand>();
+        var workingAgePopulation = (int)Math.Round(settlement.Population * 0.55);
+
+        var agriculture = settlement.LocalResources.Contains("obilí")
+            ? Math.Max(1, workingAgePopulation * 35 / 100)
+            : Math.Max(1, workingAgePopulation * 10 / 100);
+
+        jobs.Add(new("zemědělec", agriculture));
+
+        if (settlement.LocalResources.Contains("dřevo"))
+            jobs.Add(new("dřevorubec", Math.Max(1, workingAgePopulation * 8 / 100)));
+
+        if (settlement.LocalResources.Contains("železná ruda"))
+            jobs.Add(new("horník", Math.Max(1, workingAgePopulation * 4 / 100)));
+
+        if (settlement.LocalResources.Contains("ryby"))
+            jobs.Add(new("rybář", Math.Max(1, workingAgePopulation * 4 / 100)));
+
+        jobs.Add(new("řemeslník", Math.Max(1, workingAgePopulation * 12 / 100)));
+        jobs.Add(new("služby", Math.Max(1, workingAgePopulation * 8 / 100)));
+
+        if (settlement.Type is "town" or "market_town")
+        {
+            jobs.Add(new("obchodník", Math.Max(1, workingAgePopulation * 7 / 100)));
+            jobs.Add(new("správa", Math.Max(1, workingAgePopulation * 4 / 100)));
+        }
+
+        var allocated = jobs.Sum(x => x.WorkersNeeded);
+        if (allocated < workingAgePopulation)
+            jobs.Add(new("ostatní práce", workingAgePopulation - allocated));
+
+        return jobs;
+    }
+
+    private static List<Business> GenerateBusinesses(
+        Random rng,
         List<Settlement> settlements,
-        List<Business> businesses)
+        List<SettlementEconomy> economies)
+    {
+        var result = new List<Business>();
+        var id = 1;
+
+        foreach (var settlement in settlements)
+        {
+            var economy = economies.Single(x => x.SettlementId == settlement.Id);
+
+            void Add(string type, int workersPerBusiness, int capacityPerWorker, params string[] outputs)
+            {
+                var job = JobForBusiness(type);
+                var workers = economy.JobDemand.FirstOrDefault(x => x.Profession == job)?.WorkersNeeded ?? 0;
+                var count = Math.Max(0, (int)Math.Ceiling(workers / (double)workersPerBusiness));
+
+                for (var n = 0; n < count; n++)
+                {
+                    var required = Math.Min(workersPerBusiness, Math.Max(1, workers - n * workersPerBusiness));
+                    result.Add(new Business(
+                        $"business.{id++}",
+                        GenerateBusinessName(rng, settlement.Name, type),
+                        type,
+                        settlement.Id,
+                        "",
+                        [],
+                        outputs.ToList(),
+                        required,
+                        required * capacityPerWorker));
+                }
+            }
+
+            if (settlement.LocalResources.Contains("obilí"))
+                Add("farm", 8, 120, "food");
+
+            if (settlement.LocalResources.Contains("dřevo"))
+                Add("woodcutter", 6, 80, "fuel", "wood");
+
+            if (settlement.LocalResources.Contains("železná ruda"))
+                Add("mine", 10, 50, "iron_ore");
+
+            if (settlement.LocalResources.Contains("ryby"))
+                Add("fishery", 5, 75, "food");
+
+            Add("workshop", 5, 30, "tools");
+            Add("inn", 6, 20, "services");
+
+            if (settlement.Type is "town" or "market_town")
+                Add("merchant", 5, 25, "trade");
+        }
+
+        return result;
+    }
+
+    private static void AssignHouseholdOccupations(
+        Random rng,
+        List<Household> households,
+        List<SettlementEconomy> economies)
+    {
+        foreach (var settlementGroup in households.GroupBy(x => x.SettlementId))
+        {
+            var economy = economies.Single(x => x.SettlementId == settlementGroup.Key);
+            var pool = economy.JobDemand
+                .SelectMany(j => Enumerable.Repeat(j.Profession, j.WorkersNeeded))
+                .OrderBy(_ => rng.Next())
+                .ToList();
+
+            var i = 0;
+            foreach (var household in settlementGroup)
+            {
+                household.PrimaryOccupation = pool.Count == 0
+                    ? "ostatní práce"
+                    : pool[i++ % pool.Count];
+
+                household.WealthGroats = household.SocialClass switch
+                {
+                    "elite" => rng.Next(120, 301),
+                    "merchant" => rng.Next(70, 181),
+                    "artisan" => rng.Next(35, 101),
+                    _ => rng.Next(8, 61)
+                };
+            }
+        }
+    }
+
+    private static List<Character> GenerateImportantCharacters(
+        Random rng,
+        List<Household> households,
+        List<PersonStub> people,
+        List<Settlement> settlements)
     {
         var result = new List<Character>();
         var id = 1;
 
-        foreach (var family in families)
+        foreach (var settlement in settlements)
         {
-            var settlement = settlements.Single(x => x.Id == family.HomeSettlementId);
-            var count = rng.Next(2, 6);
+            var localHouseholds = households
+                .Where(x => x.SettlementId == settlement.Id)
+                .OrderByDescending(x => x.WealthGroats)
+                .Take(Math.Clamp(settlement.Population / 180, 4, 12))
+                .ToList();
 
-            for (var i = 0; i < count; i++)
+            foreach (var household in localHouseholds)
             {
-                var age = i == 0 ? rng.Next(30, 61) : rng.Next(16, 58);
-                var character = new Character(
-                    $"person.{id++}",
-                    GenerateGivenName(rng),
-                    age,
-                    PickProfession(rng, settlement, businesses),
-                    family.Id,
+                var person = people
+                    .Where(x => x.HouseholdId == household.Id && x.Age >= 18)
+                    .OrderByDescending(x => x.Age)
+                    .FirstOrDefault();
+
+                if (person is null)
+                    continue;
+
+                result.Add(new Character(
+                    $"character.{id++}",
+                    person.Name,
+                    person.Age,
+                    household.PrimaryOccupation,
+                    household.Id,
                     settlement.Id,
                     [],
-                    WealthFor(family.SocialClass, rng),
-                    GenerateTraits(rng));
-
-                result.Add(character);
-                family.MemberIds.Add(character.Id);
+                    household.WealthGroats,
+                    GenerateTraits(rng)));
             }
         }
 
@@ -530,7 +678,7 @@ internal static class WorldGenerator
                 ? characters.First()
                 : candidates[rng.Next(candidates.Count)];
 
-            var workerCount = Math.Min(Math.Max(0, candidates.Count - 1), WorkerCountFor(b.Type, rng));
+            var workerCount = Math.Min(Math.Max(0, candidates.Count - 1), Math.Min(3, b.RequiredWorkers));
             var workers = candidates
                 .Where(x => x.Id != owner.Id)
                 .OrderBy(_ => rng.Next())
@@ -592,9 +740,9 @@ internal static class WorldGenerator
             var local = factions.Where(x => x.SeatSettlementId == c.HomeSettlementId).ToList();
             var memberships = local
                 .Where(f => f.Type == "civic"
-                    ? c.Profession.Contains("správ") || c.WealthGroats > 70
+                    ? c.Profession == "správa" || c.WealthGroats > 100
                     : f.Type == "guild"
-                        ? c.Profession.Contains("kupec") || c.Profession.Contains("hostinsk") || c.WealthGroats > 50
+                        ? c.Profession is "obchodník" or "služby" || c.WealthGroats > 80
                         : rng.NextDouble() < 0.12)
                 .Select(x => x.Id)
                 .Distinct()
@@ -604,32 +752,28 @@ internal static class WorldGenerator
         }).ToList();
     }
 
-    private static List<Relationship> GenerateRelationships(
-        Random rng,
-        List<Character> characters,
-        List<Family> families)
+    private static List<Relationship> GenerateRelationships(Random rng, List<Character> characters)
     {
         var result = new List<Relationship>();
 
-        foreach (var family in families)
+        foreach (var group in characters.GroupBy(x => x.HomeSettlementId))
         {
-            var members = characters.Where(x => x.FamilyId == family.Id).ToList();
-
-            for (var i = 0; i < members.Count; i++)
-            for (var j = 0; j < members.Count; j++)
+            var local = group.ToList();
+            for (var i = 0; i < local.Count; i++)
+            for (var j = i + 1; j < local.Count; j++)
             {
-                if (i == j) continue;
+                if (rng.NextDouble() > 0.35) continue;
 
                 result.Add(new Relationship(
-                    members[i].Id,
-                    members[j].Id,
-                    rng.Next(55, 91),
-                    rng.Next(45, 86),
-                    rng.Next(50, 91),
-                    rng.Next(0, 21),
-                    rng.Next(0, 21),
-                    rng.Next(45, 91),
-                    rng.Next(0, 16)));
+                    local[i].Id,
+                    local[j].Id,
+                    rng.Next(25, 81),
+                    rng.Next(25, 81),
+                    rng.Next(10, 71),
+                    rng.Next(0, 31),
+                    rng.Next(0, 31),
+                    rng.Next(10, 71),
+                    rng.Next(0, 41)));
             }
         }
 
@@ -646,20 +790,11 @@ internal static class WorldGenerator
         var startYear = 1427 - config.HistoryYears;
 
         foreach (var settlement in settlements)
-        {
             events.Add(new HistoricalEvent(
                 rng.Next(startYear, 1400),
-                $"{settlement.Name} se ustálilo jako {SettlementRole(settlement)}.",
+                $"{settlement.Name} se ustálilo jako významnější místní sídlo.",
                 [settlement.Id],
                 []));
-
-            if (settlement.EconomicSpecializations.Contains("obilí") && rng.NextDouble() < 0.65)
-                events.Add(new HistoricalEvent(
-                    rng.Next(1400, 1426),
-                    $"Dobrá úroda posílila obchod s obilím v okolí {settlement.Name}.",
-                    [settlement.Id],
-                    []));
-        }
 
         foreach (var faction in factions)
             events.Add(new HistoricalEvent(
@@ -678,8 +813,8 @@ internal static class WorldGenerator
         List<Road> roads)
     {
         var region = regions[0];
-
         var occupied = settlements.Select(s => (s.X, s.Y)).ToHashSet();
+
         var candidates = region.Cells
             .Where(c => !occupied.Contains((c.X, c.Y)))
             .Where(c => settlements.Any(s => Distance(c.X, c.Y, s.X, s.Y) <= 7.0))
@@ -750,6 +885,10 @@ internal static class WorldGenerator
         var factor = target / (double)current;
         foreach (var settlement in local)
             settlement.Population = Math.Max(40, (int)Math.Round(settlement.Population * factor));
+
+        var diff = target - local.Sum(s => s.Population);
+        if (diff != 0)
+            local[0].Population += diff;
     }
 
     private static List<string> ResourcesAround(Region region, int x, int y, int radius)
@@ -793,22 +932,7 @@ internal static class WorldGenerator
         return "zvlněná venkovská krajina";
     }
 
-    private static List<string> DeriveSettlementSpecializations(
-        MapCell cell,
-        List<string> localResources,
-        string type)
-    {
-        var result = new List<string>();
-        if (localResources.Contains("obilí")) result.Add("obilí");
-        if (localResources.Contains("dřevo")) result.Add("dřevo");
-        if (localResources.Contains("železná ruda")) result.Add("kovářství");
-        if (localResources.Contains("ryby")) result.Add("rybolov");
-        if (localResources.Contains("pastviny")) result.Add("chov");
-        if (type is "town" or "market_town") result.Add("obchod");
-        return result;
-    }
-
-    private static List<string> DeriveLandmarks(string type, List<string> specializations)
+    private static List<string> DeriveLandmarks(string type, List<string> localResources)
     {
         var result = new List<string>();
 
@@ -822,10 +946,10 @@ internal static class WorldGenerator
             result.Add("náves");
         }
 
-        if (specializations.Contains("obilí")) result.Add("sýpky");
-        if (specializations.Contains("dřevo")) result.Add("dřevní sklad");
-        if (specializations.Contains("kovářství")) result.Add("kovárna");
-        if (specializations.Contains("rybolov")) result.Add("rybí trh");
+        if (localResources.Contains("obilí")) result.Add("sýpky");
+        if (localResources.Contains("dřevo")) result.Add("dřevní sklad");
+        if (localResources.Contains("železná ruda")) result.Add("kovárna");
+        if (localResources.Contains("ryby")) result.Add("rybí trh");
 
         return result;
     }
@@ -853,26 +977,25 @@ internal static class WorldGenerator
         return Math.Max(40, (int)Math.Round(basePop * environmentFactor));
     }
 
-    private static string PickProfession(Random rng, Settlement settlement, List<Business> businesses)
+    private static void AddProduction(List<ResourceAmount> production, string resource, int amount)
     {
-        var localTypes = businesses
-            .Where(x => x.SettlementId == settlement.Id)
-            .Select(x => x.Type)
-            .ToList();
-
-        var professions = new List<string> { "zemědělec", "dělník", "správce domácnosti" };
-
-        if (localTypes.Contains("mill")) professions.Add("mlynář");
-        if (localTypes.Contains("bakery")) professions.Add("pekař");
-        if (localTypes.Contains("inn")) professions.Add("hostinský");
-        if (localTypes.Contains("merchant")) professions.Add("kupec");
-        if (localTypes.Contains("smithy")) professions.Add("kovář");
-        if (localTypes.Contains("woodcutter")) professions.Add("dřevorubec");
-        if (localTypes.Contains("carpenter")) professions.Add("tesař");
-        if (localTypes.Contains("fishery")) professions.Add("rybář");
-
-        return professions[rng.Next(professions.Count)];
+        var existing = production.FindIndex(x => x.Resource == resource);
+        if (existing >= 0)
+            production[existing] = production[existing] with { Amount = production[existing].Amount + amount };
+        else
+            production.Add(new ResourceAmount(resource, amount));
     }
+
+    private static string JobForBusiness(string type) => type switch
+    {
+        "farm" => "zemědělec",
+        "woodcutter" => "dřevorubec",
+        "mine" => "horník",
+        "fishery" => "rybář",
+        "merchant" => "obchodník",
+        "inn" => "služby",
+        _ => "řemeslník"
+    };
 
     private static void ApplyClimateBias(string bias, ref int moisture, ref int temperature, ref int elevation)
     {
@@ -916,16 +1039,14 @@ internal static class WorldGenerator
         var steps = Math.Max(Math.Abs(x2 - x1), Math.Abs(y2 - y1));
 
         if (steps == 0)
-        {
-            result.Add(new MapPoint(x1, y1));
-            return result;
-        }
+            return [new MapPoint(x1, y1)];
 
         for (var i = 0; i <= steps; i++)
         {
             var t = i / (double)steps;
             var x = (int)Math.Round(x1 + (x2 - x1) * t);
             var y = (int)Math.Round(y1 + (y2 - y1) * t);
+
             if (result.Count == 0 || result[^1].X != x || result[^1].Y != y)
                 result.Add(new MapPoint(x, y));
         }
@@ -944,22 +1065,12 @@ internal static class WorldGenerator
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    private static double Distance01(
-        int x, int y,
-        double cx, double cy,
-        int width, int height)
+    private static double Distance01(int x, int y, double cx, double cy, int width, int height)
     {
         var dx = (x - cx) / width;
         var dy = (y - cy) / height;
         return Math.Clamp(Math.Sqrt(dx * dx + dy * dy), 0, 1);
     }
-
-    private static int WealthFor(string socialClass, Random rng) => socialClass switch
-    {
-        "elite" => rng.Next(75, 151),
-        "merchant" => rng.Next(45, 101),
-        _ => rng.Next(10, 61)
-    };
 
     private static List<string> GenerateTraits(Random rng)
     {
@@ -967,15 +1078,6 @@ internal static class WorldGenerator
             ["praktický", "společenský", "opatrný", "ambiciózní", "pracovitý", "nedůvěřivý", "štědrý", "tvrdohlavý"];
         return pool.OrderBy(_ => rng.Next()).Take(2).ToList();
     }
-
-    private static int WorkerCountFor(string type, Random rng) => type switch
-    {
-        "farm" => rng.Next(1, 4),
-        "inn" => rng.Next(1, 4),
-        "mill" => rng.Next(0, 3),
-        "merchant" => rng.Next(0, 3),
-        _ => rng.Next(0, 2)
-    };
 
     private static string GenerateRegionName(Random rng) =>
         RegionPrefixes[rng.Next(RegionPrefixes.Length)] + RegionSuffixes[rng.Next(RegionSuffixes.Length)];
@@ -992,15 +1094,12 @@ internal static class WorldGenerator
     private static string GenerateBusinessName(Random rng, string settlementName, string type) => type switch
     {
         "inn" => $"Hostinec U {Pick(rng, "Jelena", "Tří lip", "Černého koně", "Staré brány")}",
-        "mill" => $"{settlementName}ský mlýn",
-        "bakery" => $"Pekárna {GenerateSurname(rng)}",
-        "smithy" => $"Kovárna {GenerateSurname(rng)}",
-        "carpenter" => $"Tesařství {GenerateSurname(rng)}",
+        "mine" => $"Důl {GenerateSurname(rng)}",
+        "fishery" => $"Rybářství {GenerateSurname(rng)}",
         "woodcutter" => $"Dřevorubecký dvůr {GenerateSurname(rng)}",
         "merchant" => $"Obchod {GenerateSurname(rng)}",
-        "market_stall" => $"Tržní stánek {GenerateSurname(rng)}",
-        "fishery" => $"Rybářství {GenerateSurname(rng)}",
         "farm" => $"Hospodářství {GenerateSurname(rng)}",
+        "workshop" => $"Dílna {GenerateSurname(rng)}",
         _ => $"{type} {GenerateSurname(rng)}"
     };
 
@@ -1009,11 +1108,6 @@ internal static class WorldGenerator
 
     private static string GenerateGivenName(Random rng) =>
         Pick(rng, "Matěj", "Jan", "Ondřej", "Václav", "Anna", "Kateřina", "Eliška", "Markéta", "Jakub", "Petr");
-
-    private static string SettlementRole(Settlement settlement) =>
-        settlement.Type is "town" or "market_town"
-            ? "regionální obchodní centrum"
-            : "lokální sídlo navázané na zdroje svého okolí";
 
     private static string WeatherFor(Region region, Random rng)
     {
@@ -1072,17 +1166,7 @@ internal sealed record WorldConfig(
     int HistoryYears)
 {
     public static WorldConfig Default(int seed) =>
-        new(
-            seed,
-            "late_medieval",
-            "high",
-            "low",
-            "regional",
-            "medieval",
-            "mixed",
-            "medium",
-            "deep",
-            80);
+        new(seed, "late_medieval", "high", "low", "regional", "medieval", "mixed", "medium", "deep", 80);
 }
 
 internal sealed record GeneratedWorld(
@@ -1091,8 +1175,10 @@ internal sealed record GeneratedWorld(
     List<Region> Regions,
     List<Settlement> Settlements,
     List<Road> Roads,
+    List<Household> Households,
+    List<PersonStub> People,
+    List<SettlementEconomy> SettlementEconomies,
     List<Faction> Factions,
-    List<Family> Families,
     List<Character> Characters,
     List<Business> Businesses,
     List<Relationship> Relationships,
@@ -1155,11 +1241,41 @@ internal sealed record Settlement(
     int Y,
     List<string> Landmarks,
     List<string> Connections,
-    List<string> LocalResources,
-    List<string> EconomicSpecializations)
+    List<string> LocalResources)
 {
     public int Population { get; set; } = InitialPopulation;
 }
+
+internal sealed record Household(
+    string Id,
+    string SettlementId,
+    int MemberCount,
+    string SocialClass,
+    string InitialOccupation,
+    int InitialWealthGroats,
+    List<string> MemberIds)
+{
+    public string PrimaryOccupation { get; set; } = InitialOccupation;
+    public int WealthGroats { get; set; } = InitialWealthGroats;
+}
+
+internal sealed record PersonStub(
+    string Id,
+    string Name,
+    int Age,
+    string HouseholdId,
+    string SettlementId);
+
+internal sealed record SettlementEconomy(
+    string SettlementId,
+    List<ResourceAmount> Demands,
+    List<ResourceAmount> Production,
+    List<ResourceAmount> Balances,
+    List<JobDemand> JobDemand);
+
+internal sealed record ResourceAmount(string Resource, int Amount);
+
+internal sealed record JobDemand(string Profession, int WorkersNeeded);
 
 internal sealed record Faction(
     string Id,
@@ -1169,19 +1285,12 @@ internal sealed record Faction(
     int Influence,
     List<string> Interests);
 
-internal sealed record Family(
-    string Id,
-    string Name,
-    string HomeSettlementId,
-    string SocialClass,
-    List<string> MemberIds);
-
 internal sealed record Character(
     string Id,
     string Name,
     int Age,
     string Profession,
-    string FamilyId,
+    string HouseholdId,
     string HomeSettlementId,
     List<string> FactionIds,
     int WealthGroats,
@@ -1194,7 +1303,9 @@ internal sealed record Business(
     string SettlementId,
     string OwnerCharacterId,
     List<string> WorkerCharacterIds,
-    List<string> ServicesOrGoods);
+    List<string> Outputs,
+    int RequiredWorkers,
+    int Capacity);
 
 internal sealed record Relationship(
     string FromCharacterId,
@@ -1233,16 +1344,9 @@ internal static class WorldValidator
         var errors = new List<string>();
 
         var settlementIds = world.Settlements.Select(x => x.Id).ToHashSet();
-        var regionIds = world.Regions.Select(x => x.Id).ToHashSet();
-        var factionIds = world.Factions.Select(x => x.Id).ToHashSet();
-        var familyIds = world.Families.Select(x => x.Id).ToHashSet();
+        var householdIds = world.Households.Select(x => x.Id).ToHashSet();
         var characterIds = world.Characters.Select(x => x.Id).ToHashSet();
-
-        if (world.Regions.Count == 0)
-            errors.Add("World has no regions.");
-
-        if (world.Settlements.Count == 0)
-            errors.Add("World has no settlements.");
+        var factionIds = world.Factions.Select(x => x.Id).ToHashSet();
 
         foreach (var region in world.Regions)
         {
@@ -1252,77 +1356,84 @@ internal static class WorldValidator
             if (region.PopulationBreakdown.Total != region.Population)
                 errors.Add($"Region {region.Id} population breakdown does not match total.");
 
-            if (region.Cells.Any(c => c.X < 0 || c.X >= region.Width || c.Y < 0 || c.Y >= region.Height))
-                errors.Add($"Region {region.Id} contains out-of-bounds cells.");
+            var settledPopulation = world.Settlements
+                .Where(x => x.RegionId == region.Id)
+                .Sum(x => x.Population);
+
+            if (settledPopulation != region.PopulationBreakdown.Settled)
+                errors.Add($"Region {region.Id} settled population mismatch.");
         }
 
         foreach (var settlement in world.Settlements)
         {
-            if (!regionIds.Contains(settlement.RegionId))
-                errors.Add($"Settlement {settlement.Id} references missing region {settlement.RegionId}.");
+            var householdPopulation = world.Households
+                .Where(x => x.SettlementId == settlement.Id)
+                .Sum(x => x.MemberCount);
 
-            var region = world.Regions.Single(r => r.Id == settlement.RegionId);
-            if (settlement.X < 0 || settlement.X >= region.Width ||
-                settlement.Y < 0 || settlement.Y >= region.Height)
-                errors.Add($"Settlement {settlement.Id} is outside its region.");
+            var peoplePopulation = world.People
+                .Count(x => x.SettlementId == settlement.Id);
 
-            if (settlement.Population <= 0)
-                errors.Add($"Settlement {settlement.Id} has invalid population.");
+            if (householdPopulation != settlement.Population)
+                errors.Add($"Settlement {settlement.Id} household population mismatch.");
+
+            if (peoplePopulation != settlement.Population)
+                errors.Add($"Settlement {settlement.Id} people population mismatch.");
+
+            if (!world.SettlementEconomies.Any(x => x.SettlementId == settlement.Id))
+                errors.Add($"Settlement {settlement.Id} has no economy.");
         }
 
-        foreach (var road in world.Roads)
-        {
-            if (!settlementIds.Contains(road.FromSettlementId) ||
-                !settlementIds.Contains(road.ToSettlementId))
-                errors.Add($"Road {road.Id} references missing settlement.");
+        foreach (var household in world.Households)
+            if (!settlementIds.Contains(household.SettlementId))
+                errors.Add($"Household {household.Id} references missing settlement.");
 
-            if (road.Path.Count == 0)
-                errors.Add($"Road {road.Id} has no path.");
-        }
-
-        foreach (var family in world.Families)
-        {
-            if (!settlementIds.Contains(family.HomeSettlementId))
-                errors.Add($"Family {family.Id} references missing settlement {family.HomeSettlementId}.");
-
-            foreach (var member in family.MemberIds)
-                if (!characterIds.Contains(member))
-                    errors.Add($"Family {family.Id} references missing character {member}.");
-        }
+        foreach (var person in world.People)
+            if (!householdIds.Contains(person.HouseholdId))
+                errors.Add($"Person {person.Id} references missing household.");
 
         foreach (var character in world.Characters)
         {
-            if (!familyIds.Contains(character.FamilyId))
-                errors.Add($"Character {character.Id} references missing family {character.FamilyId}.");
-
-            if (!settlementIds.Contains(character.HomeSettlementId))
-                errors.Add($"Character {character.Id} references missing settlement {character.HomeSettlementId}.");
+            if (!householdIds.Contains(character.HouseholdId))
+                errors.Add($"Character {character.Id} references missing household.");
 
             foreach (var faction in character.FactionIds)
                 if (!factionIds.Contains(faction))
-                    errors.Add($"Character {character.Id} references missing faction {faction}.");
+                    errors.Add($"Character {character.Id} references missing faction.");
         }
 
         foreach (var business in world.Businesses)
         {
             if (!settlementIds.Contains(business.SettlementId))
-                errors.Add($"Business {business.Id} references missing settlement {business.SettlementId}.");
+                errors.Add($"Business {business.Id} references missing settlement.");
 
             if (!characterIds.Contains(business.OwnerCharacterId))
-                errors.Add($"Business {business.Id} references missing owner {business.OwnerCharacterId}.");
+                errors.Add($"Business {business.Id} references missing owner.");
 
             foreach (var worker in business.WorkerCharacterIds)
                 if (!characterIds.Contains(worker))
-                    errors.Add($"Business {business.Id} references missing worker {worker}.");
+                    errors.Add($"Business {business.Id} references missing important character worker.");
+        }
+
+        foreach (var economy in world.SettlementEconomies)
+        {
+            if (!settlementIds.Contains(economy.SettlementId))
+                errors.Add($"Economy references missing settlement.");
+
+            foreach (var balance in economy.Balances)
+            {
+                var demand = economy.Demands.FirstOrDefault(x => x.Resource == balance.Resource)?.Amount ?? 0;
+                var production = economy.Production.Where(x => x.Resource == balance.Resource).Sum(x => x.Amount);
+
+                if (production - demand != balance.Amount)
+                    errors.Add($"Economy balance mismatch for {economy.SettlementId}/{balance.Resource}.");
+            }
         }
 
         foreach (var relation in world.Relationships)
         {
-            if (!characterIds.Contains(relation.FromCharacterId))
-                errors.Add($"Relationship references missing source {relation.FromCharacterId}.");
-
-            if (!characterIds.Contains(relation.ToCharacterId))
-                errors.Add($"Relationship references missing target {relation.ToCharacterId}.");
+            if (!characterIds.Contains(relation.FromCharacterId) ||
+                !characterIds.Contains(relation.ToCharacterId))
+                errors.Add("Relationship references missing character.");
         }
 
         return errors;
