@@ -1150,7 +1150,7 @@ internal sealed record Settlement(
     string Name,
     string Type,
     string RegionId,
-    int Population,
+    [property: JsonIgnore] int InitialPopulation,
     int X,
     int Y,
     List<string> Landmarks,
@@ -1158,7 +1158,7 @@ internal sealed record Settlement(
     List<string> LocalResources,
     List<string> EconomicSpecializations)
 {
-    public int Population { get; set; } = Population;
+    public int Population { get; set; } = InitialPopulation;
 }
 
 internal sealed record Faction(
