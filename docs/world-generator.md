@@ -507,3 +507,33 @@ To zabraňuje dvěma chybám:
 2. zničení nebo změna výrobní jednotky se musí promítnout do skutečné ekonomické bilance.
 
 Trade & Market má být postaven až nad tímto konzistentním základem.
+
+
+## Kapacita fyzických zdrojů
+
+Od v0.4.2 nejsou přírodní zdroje pouze binární vlastnost lokace.
+
+Sídlo získává od svého skutečného okolí `ResourceCapacity`, která určuje fyzický strop primární produkce.
+
+```text
+map cells
+→ usable local resource
+→ area / quality
+→ max workers
+→ max output
+→ production units
+```
+
+Tím se obrací předchozí logika „více obyvatel → více producentů“.
+
+Správně je:
+
+```text
+prostředí určí kapacitu
+↓
+kapacita omezuje práci a produkci
+↓
+produkce omezuje dlouhodobě udržitelnou populaci nebo vytváří potřebu obchodu
+```
+
+Tento základ je nutný před Trade & Market, protože deficit musí mít fyzickou příčinu, nikoli vznikat pouze náhodným koeficientem.
