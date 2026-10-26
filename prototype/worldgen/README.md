@@ -356,3 +356,76 @@ Sleduj hlavně:
 4. zda rozdílná geografie vytváří rozdílné fyzické limity.
 
 Po ověření této vrstvy může **v0.5 Trade & Market** pracovat s přebytky a deficity, které už mají skutečnou fyzickou příčinu.
+
+
+## v0.4.3 – Hinterland & Resource Calibration
+
+v0.4.3 propojuje hlavní sídla s venkovským hospodářským zázemím a sjednocuje měřítko produkce a spotřeby.
+
+### Hinterland
+
+Každá nesídelní buňka regionu je přiřazena nejbližšímu hlavnímu sídlu.
+
+```text
+region cells
+→ nearest settlement
+→ settlement hinterland
+```
+
+Tím vzniká ne překrývající se hospodářské zázemí.
+
+Každé zázemí dostává podíl:
+
+- rozptýlené venkovské populace;
+- populace malých osad;
+- obyvatel samot;
+- konkrétních mapových buněk.
+
+Součty všech hinterlandů musí přesně odpovídat regionálnímu populačnímu účetnictví.
+
+### Ekonomická populace
+
+Ekonomika centra nyní zahrnuje:
+
+```text
+settlement population
++
+assigned hinterland population
+=
+economic population
+```
+
+To znamená, že venkovská populace už není pouze statistika bez ekonomické role.
+
+### Kapacita z celého zázemí
+
+Farmland, forest, iron deposit a fishery se již nepočítají jen z malého radiusu kolem města.
+
+Kapacita vzniká z mapových buněk skutečně přiřazených danému sídlu.
+
+### Kalibrované jednotky
+
+Základní spotřeba používá roční abstraktní jednotky společné s výrobou.
+
+Prototyp používá:
+
+```text
+food = 1 jednotka / osoba / rok
+fuel = 0.65 jednotky / osoba / rok
+clothing = 0.18 jednotky / osoba / rok
+tools = 0.08 jednotky / osoba / rok
+```
+
+Nejde o kilogramy. Jde o normalizované roční potřeby, aby produkce a spotřeba používaly stejnou škálu.
+
+### Co ověřit
+
+Při testu sleduj hlavně:
+
+1. kolik venkovské populace připadlo jednotlivým sídlům;
+2. zda součet zázemí odpovídá regionální populaci mimo hlavní sídla;
+3. zda farmland a další kapacity výrazněji odpovídají skutečnému okolí;
+4. zda některá sídla mají přebytek a jiná deficit bez téměř automatické soběstačnosti;
+5. zda velké město může být závislé na svém venkovském zázemí, ale není bez obchodu automaticky odsouzeno k hladomoru.
+
+Po ověření této vrstvy je dalším krokem **v0.5 Trade & Market**.
