@@ -288,3 +288,89 @@ Tím nevzniká nevysvětlená populace mimo sídla.
 Každý subsystém používá vlastní random stream odvozený ze stejného root seedu.
 
 Změna parametru politiky proto nesmí spotřebou náhodných čísel změnit geografii. Tento princip je důležitý pro reprodukovatelnost, testování i budoucí migrace saveů.
+
+
+## Populace, domácnosti a ekonomika
+
+Od v0.4 je populace hlavních sídel reprezentována persistentními domácnostmi a lehkými osobami.
+
+Zásadní pravidlo:
+
+> **Detailní Character není obyvatel vytvořený navíc. Je to hlubší reprezentace člověka, který už ve světě existuje.**
+
+### Domácnosti
+
+```text
+Settlement
+→ Household[]
+→ PersonStub[]
+```
+
+Domácnost je základní sociálně-ekonomická jednotka. Uchovává počet členů, sociální vrstvu, hlavní zdroj obživy a majetkovou úroveň.
+
+### Populační konzistence
+
+Pro každé hlavní sídlo musí platit:
+
+```text
+settlement.population
+=
+sum(household.member_count)
+=
+count(persistent_people)
+```
+
+Statistická populace mimo hlavní sídla zůstává zatím agregovaná v regionálním populačním účetnictví.
+
+### Potřeby a výroba
+
+Každé sídlo má agregovanou poptávku po základních kategoriích a produkci odvozenou od lokálních zdrojů.
+
+```text
+population
+→ demand
+
+local resources
+→ possible production
+→ labor demand
+→ businesses
+→ production capacity
+```
+
+Ekonomická bilance je:
+
+```text
+local_balance(resource)
+=
+local_production(resource)
+-
+local_demand(resource)
+```
+
+Kladný zůstatek je potenciální export. Záporný zůstatek je potenciální importní potřeba.
+
+### Pracovní síla
+
+Poptávka po profesích se odvozuje od velikosti populace, lokálních zdrojů a typu sídla.
+
+Podniky následně vznikají jako organizační struktura, která tuto práci a produkci zajišťuje.
+
+Tím se worldgen posouvá od:
+
+```text
+random business
+```
+
+k:
+
+```text
+lidé
+→ potřeby
+→ práce
+→ podniky
+→ výroba
+```
+
+### Hranice v0.4
+
+v0.4 ještě nesimuluje zásoby, ceny, mzdy, peněžní toky ani skutečné přepravy. Tyto vrstvy mají navázat až na ověřenou populační a produkční strukturu.
