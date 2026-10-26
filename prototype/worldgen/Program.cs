@@ -37,7 +37,7 @@ internal static class Program
 
     private static void PrintSummary(GeneratedWorld world, string output)
     {
-        Console.WriteLine("RPGSandbox – World Generator v0.4.1 Economic Consistency");
+        Console.WriteLine("RPGSandbox – World Generator v0.4.2 Resource Capacity");
         Console.WriteLine($"Seed: {world.Config.Seed}");
         Console.WriteLine($"Éra: {world.Config.Era}");
         Console.WriteLine($"Climate bias: {world.Config.ClimateBias}");
@@ -69,6 +69,8 @@ internal static class Program
             Console.WriteLine($"- {settlement.Name} ({settlement.Type}) [{settlement.X},{settlement.Y}], pop. {settlement.Population}");
             Console.WriteLine($"    domácnosti: {world.Households.Count(x => x.SettlementId == settlement.Id)}");
             Console.WriteLine($"    místní zdroje: {string.Join(", ", settlement.LocalResources)}");
+            var capacities = world.ResourceCapacities.Where(x => x.SettlementId == settlement.Id).ToList();
+            Console.WriteLine($"    kapacity zdrojů: {string.Join(", ", capacities.Select(x => $"{x.Type} area:{x.AvailableArea} quality:{x.Quality}/100 workers≤{x.MaxWorkers} output≤{x.MaxAnnualOutput}"))}");
             Console.WriteLine($"    výrobní jednotky: domácí {localUnits.Count(x => x.Scale == "household")}, podniky {localUnits.Count(x => x.Scale == "business")}, velcí producenti {localUnits.Count(x => x.Scale == "estate")}");
             Console.WriteLine($"    potřeby: {FormatAmounts(economy.Demands)}");
             Console.WriteLine($"    produkce: {FormatAmounts(economy.Production)}");
@@ -87,6 +89,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine($"Domácnosti: {world.Households.Count}");
         Console.WriteLine($"Lehké persistentní osoby: {world.People.Count}");
+        Console.WriteLine($"Kapacity fyzických zdrojů: {world.ResourceCapacities.Count}");
         Console.WriteLine($"Výrobní jednotky celkem: {world.ProductionUnits.Count}");
         Console.WriteLine($"Viditelné podniky/větší producenti: {world.Businesses.Count}");
         Console.WriteLine($"Významné postavy: {world.Characters.Count}");
@@ -162,10 +165,12 @@ internal static class WorldGenerator
 
         var households = GenerateHouseholds(populationRng, settlements);
         var people = GeneratePeople(populationRng, households);
-        var jobDemand = GenerateJobDemand(settlements);
+        var resourceCapacities = GenerateResourceCapacities(economyRng, regions, settlements);
+        var jobDemand = GenerateJobDemand(settlements, resourceCapacities);
         AssignHouseholdOccupations(populationRng, households, jobDemand);
 
-        var productionUnits = GenerateProductionUnits(economyRng, settlements, households, jobDemand);
+        var productionUnits = GenerateProductionUnits(
+            economyRng, settlements, households, jobDemand, resourceCapacities);
         var economies = BuildSettlementEconomies(settlements, jobDemand, productionUnits);
 
         var characters = GenerateImportantCharacters(populationRng, households, people, settlements);
@@ -185,6 +190,7 @@ internal static class WorldGenerator
             roads,
             households,
             people,
+            resourceCapacities,
             productionUnits,
             economies,
             factions,
@@ -442,7 +448,73 @@ internal static class WorldGenerator
         return result;
     }
 
-    private static Dictionary<string, List<JobDemand>> GenerateJobDemand(List<Settlement> settlements)
+    private static List<ResourceCapacity> GenerateResourceCapacities(
+        Random rng,
+        List<Region> regions,
+        List<Settlement> settlements)
+    {
+        var result = new List<ResourceCapacity>();
+        var id = 1;
+
+        foreach (var settlement in settlements)
+        {
+            var region = regions.Single(x => x.Id == settlement.RegionId);
+            var nearby = region.Cells
+                .Where(c => Distance(c.X, c.Y, settlement.X, settlement.Y) <= 3.2)
+                .ToList();
+
+            void Add(string type, IEnumerable<MapCell> cells, int areaPerCell, int workerDivisor, int outputPerArea)
+            {
+                var usable = cells.ToList();
+                if (usable.Count == 0) return;
+
+                var quality = (int)Math.Round(usable.Average(c => type switch
+                {
+                    "farmland" => c.Fertility,
+                    "forest" => c.ForestCover,
+                    "iron_deposit" => c.Elevation,
+                    "fishery" => c.Moisture,
+                    _ => 50
+                }));
+
+                var area = usable.Count * areaPerCell;
+                var maxWorkers = Math.Max(1, area / workerDivisor);
+                var variation = 0.90 + rng.NextDouble() * 0.20;
+                var maxOutput = Math.Max(1, (int)Math.Round(area * outputPerArea * quality / 100.0 * variation));
+
+                result.Add(new ResourceCapacity(
+                    $"capacity.{id++}",
+                    settlement.Id,
+                    type,
+                    area,
+                    quality,
+                    maxWorkers,
+                    maxOutput));
+            }
+
+            Add("farmland",
+                nearby.Where(c => c.Fertility >= 58 && c.ForestCover < 72),
+                40, 6, 8);
+
+            Add("forest",
+                nearby.Where(c => c.ForestCover >= 52),
+                35, 9, 4);
+
+            Add("iron_deposit",
+                nearby.Where(c => c.Resources.Contains("železná ruda")),
+                18, 5, 3);
+
+            Add("fishery",
+                nearby.Where(c => c.HasRiver && c.Resources.Contains("ryby")),
+                12, 4, 5);
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, List<JobDemand>> GenerateJobDemand(
+        List<Settlement> settlements,
+        List<ResourceCapacity> capacities)
     {
         var result = new Dictionary<string, List<JobDemand>>();
 
@@ -462,10 +534,24 @@ internal static class WorldGenerator
                 }
             }
 
-            Add("zemědělec", settlement.LocalResources.Contains("obilí") ? 0.34 : 0.08);
-            Add("dřevorubec", settlement.LocalResources.Contains("dřevo") ? 0.07 : 0);
-            Add("horník", settlement.LocalResources.Contains("železná ruda") ? 0.04 : 0);
-            Add("rybář", settlement.LocalResources.Contains("ryby") ? 0.04 : 0);
+            int Cap(string type) =>
+                capacities.FirstOrDefault(x => x.SettlementId == settlement.Id && x.Type == type)?.MaxWorkers ?? 0;
+
+            void AddCapped(string profession, double desiredShare, string capacityType)
+            {
+                var desired = Math.Max(0, (int)Math.Round(workers * desiredShare));
+                var amount = Math.Min(desired, Cap(capacityType));
+                if (amount > 0)
+                {
+                    jobs.Add(new JobDemand(profession, amount));
+                    used += amount;
+                }
+            }
+
+            AddCapped("zemědělec", 0.34, "farmland");
+            AddCapped("dřevorubec", 0.07, "forest");
+            AddCapped("horník", 0.04, "iron_deposit");
+            AddCapped("rybář", 0.04, "fishery");
             Add("textil", settlement.LocalResources.Contains("pastviny") ? 0.06 : 0.02);
             Add("řemeslník", 0.10);
             Add("služby", settlement.Type is "town" or "market_town" ? 0.09 : 0.05);
@@ -484,7 +570,8 @@ internal static class WorldGenerator
     private static void AssignHouseholdOccupations(
         Random rng,
         List<Household> households,
-        Dictionary<string, List<JobDemand>> jobDemand)
+        Dictionary<string, List<JobDemand>> jobDemand,
+        List<ResourceCapacity> capacities)
     {
         foreach (var group in households.GroupBy(x => x.SettlementId))
         {
@@ -523,6 +610,8 @@ internal static class WorldGenerator
             var localHouseholds = households.Where(x => x.SettlementId == settlement.Id).ToList();
 
             int Job(string name) => jobs.TryGetValue(name, out var n) ? n : 0;
+            ResourceCapacity? Capacity(string type) =>
+                capacities.FirstOrDefault(x => x.SettlementId == settlement.Id && x.Type == type);
 
             void AddUnit(
                 string type,
@@ -543,8 +632,12 @@ internal static class WorldGenerator
             }
 
             var agriculturalWorkers = Job("zemědělec");
-            if (agriculturalWorkers > 0)
+            var farmland = Capacity("farmland");
+            if (agriculturalWorkers > 0 && farmland is not null)
             {
+                var agricultureOutput = Math.Min(
+                    farmland.MaxAnnualOutput,
+                    agriculturalWorkers * Math.Max(1, 32 + farmland.Quality / 3));
                 var householdWorkers = (int)Math.Round(agriculturalWorkers * 0.72);
                 var estateWorkers = agriculturalWorkers - householdWorkers;
                 var farmHouseholds = localHouseholds
@@ -559,13 +652,15 @@ internal static class WorldGenerator
                     if (remaining <= 0) break;
                     var workers = Math.Min(rng.Next(2, 6), remaining);
                     remaining -= workers;
+                    var output = Math.Max(1, agricultureOutput * workers / Math.Max(1, agriculturalWorkers));
                     AddUnit("family_farm", "household", workers, household.Id,
-                        new ResourceAmount("food", workers * rng.Next(42, 59)));
+                        new ResourceAmount("food", output));
                 }
 
                 if (remaining > 0)
                     AddUnit("collective_smallholdings", "household", remaining, null,
-                        new ResourceAmount("food", remaining * rng.Next(40, 55)));
+                        new ResourceAmount("food",
+                            Math.Max(1, agricultureOutput * remaining / Math.Max(1, agriculturalWorkers))));
 
                 if (estateWorkers > 0)
                 {
@@ -573,18 +668,19 @@ internal static class WorldGenerator
                     var split = SplitWorkers(estateWorkers, estateCount);
                     foreach (var workers in split)
                         AddUnit("estate_farm", "estate", workers, null,
-                            new ResourceAmount("food", workers * rng.Next(48, 66)));
+                            new ResourceAmount("food",
+                                Math.Max(1, agricultureOutput * workers / Math.Max(1, agriculturalWorkers))));
                 }
             }
 
-            AddChunkedResourceUnits("woodcutter", "business", Job("dřevorubec"), 12, 18,
-                workers => [new ResourceAmount("fuel", workers * rng.Next(28, 40))]);
+            AddCapacityBoundUnits(
+                "woodcutter", "business", "dřevorubec", "forest", 12, 18, "fuel", 22);
 
-            AddChunkedResourceUnits("mine", "estate", Job("horník"), 16, 28,
-                workers => [new ResourceAmount("tools", workers * rng.Next(2, 4))]);
+            AddCapacityBoundUnits(
+                "mine", "estate", "horník", "iron_deposit", 16, 28, "tools", 2);
 
-            AddChunkedResourceUnits("fishery", "household", Job("rybář"), 5, 9,
-                workers => [new ResourceAmount("food", workers * rng.Next(30, 44))]);
+            AddCapacityBoundUnits(
+                "fishery", "household", "rybář", "fishery", 5, 9, "food", 24);
 
             var textileWorkers = Job("textil");
             if (textileWorkers > 0)
@@ -631,6 +727,42 @@ internal static class WorldGenerator
             if (administration > 0)
                 AddUnit("administration", "institution", administration, null,
                     new ResourceAmount("administration", administration * 10));
+
+            void AddCapacityBoundUnits(
+                string type,
+                string scale,
+                string profession,
+                string capacityType,
+                int minChunk,
+                int maxChunk,
+                string outputResource,
+                int workerProductivity)
+            {
+                var workersTotal = Job(profession);
+                var cap = Capacity(capacityType);
+                if (workersTotal <= 0 || cap is null) return;
+
+                var totalOutput = Math.Min(
+                    cap.MaxAnnualOutput,
+                    workersTotal * workerProductivity);
+
+                var remainingWorkers = workersTotal;
+                var allocatedOutput = 0;
+
+                while (remainingWorkers > 0)
+                {
+                    var workers = Math.Min(remainingWorkers, rng.Next(minChunk, maxChunk + 1));
+                    remainingWorkers -= workers;
+
+                    var output = remainingWorkers == 0
+                        ? totalOutput - allocatedOutput
+                        : Math.Max(1, totalOutput * workers / workersTotal);
+
+                    allocatedOutput += output;
+                    AddUnit(type, scale, workers, null,
+                        new ResourceAmount(outputResource, Math.Max(0, output)));
+                }
+            }
 
             void AddChunkedResourceUnits(
                 string type,
@@ -1207,6 +1339,7 @@ internal sealed record GeneratedWorld(
     List<Road> Roads,
     List<Household> Households,
     List<PersonStub> People,
+    List<ResourceCapacity> ResourceCapacities,
     List<ProductionUnit> ProductionUnits,
     List<SettlementEconomy> SettlementEconomies,
     List<Faction> Factions,
@@ -1296,6 +1429,15 @@ internal sealed record PersonStub(
     int Age,
     string HouseholdId,
     string SettlementId);
+
+internal sealed record ResourceCapacity(
+    string Id,
+    string SettlementId,
+    string Type,
+    int AvailableArea,
+    int Quality,
+    int MaxWorkers,
+    int MaxAnnualOutput);
 
 internal sealed record ProductionUnit(
     string Id,
@@ -1429,6 +1571,15 @@ internal static class WorldValidator
             if (!householdIds.Contains(person.HouseholdId))
                 errors.Add($"Person {person.Id} references missing household.");
 
+        foreach (var capacity in world.ResourceCapacities)
+        {
+            if (!settlementIds.Contains(capacity.SettlementId))
+                errors.Add($"Resource capacity {capacity.Id} references missing settlement.");
+
+            if (capacity.AvailableArea <= 0 || capacity.MaxWorkers <= 0 || capacity.MaxAnnualOutput <= 0)
+                errors.Add($"Resource capacity {capacity.Id} has invalid values.");
+        }
+
         foreach (var unit in world.ProductionUnits)
         {
             if (!settlementIds.Contains(unit.SettlementId))
@@ -1458,6 +1609,24 @@ internal static class WorldValidator
 
             if (!characterIds.Contains(business.OwnerCharacterId))
                 errors.Add($"Business {business.Id} references missing owner.");
+        }
+
+        foreach (var settlement in world.Settlements)
+        {
+            foreach (var cap in world.ResourceCapacities.Where(x => x.SettlementId == settlement.Id))
+            {
+                var usedWorkers = cap.Type switch
+                {
+                    "farmland" => world.ProductionUnits.Where(x => x.SettlementId == settlement.Id && x.Type is "family_farm" or "collective_smallholdings" or "estate_farm").Sum(x => x.Workers),
+                    "forest" => world.ProductionUnits.Where(x => x.SettlementId == settlement.Id && x.Type == "woodcutter").Sum(x => x.Workers),
+                    "iron_deposit" => world.ProductionUnits.Where(x => x.SettlementId == settlement.Id && x.Type == "mine").Sum(x => x.Workers),
+                    "fishery" => world.ProductionUnits.Where(x => x.SettlementId == settlement.Id && x.Type == "fishery").Sum(x => x.Workers),
+                    _ => 0
+                };
+
+                if (usedWorkers > cap.MaxWorkers)
+                    errors.Add($"Resource capacity worker limit exceeded for {cap.Id}: {usedWorkers}>{cap.MaxWorkers}.");
+            }
         }
 
         foreach (var economy in world.SettlementEconomies)
