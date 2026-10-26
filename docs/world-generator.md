@@ -537,3 +537,55 @@ produkce omezuje dlouhodobě udržitelnou populaci nebo vytváří potřebu obch
 ```
 
 Tento základ je nutný před Trade & Market, protože deficit musí mít fyzickou příčinu, nikoli vznikat pouze náhodným koeficientem.
+
+
+## Hospodářské zázemí sídel
+
+Od v0.4.3 se hlavní sídlo neposuzuje jako izolovaná ekonomická tečka.
+
+Každá venkovská buňka regionu je deterministicky přiřazena nejbližšímu sídlu a vytváří jeho `Hinterland`.
+
+```text
+settlement
+↕
+assigned rural cells
+↕
+rural households / hamlets / isolated population
+↕
+farmland / forest / deposits / rivers
+```
+
+Hinterland je ekonomické zázemí, nikoli nutně politická hranice.
+
+### Populační invariant
+
+Pro region musí platit:
+
+```text
+Σ hinterland.rural_population = region.rural_households_population
+Σ hinterland.hamlet_population = region.small_hamlets_population
+Σ hinterland.isolated_population = region.isolated_population
+```
+
+### Kalibrace produkce a spotřeby
+
+Produkce a spotřeba musí používat společnou abstraktní roční škálu.
+
+Pro potraviny je základní interpretace:
+
+> **1 food unit = základní roční potravinová potřeba jednoho člověka.**
+
+Ostatní základní zdroje používají analogické normalizované jednotky.
+
+To umožňuje srovnávat fyzickou produkční kapacitu s populací bez falešné přesnosti kilogramů nebo historických měr, které zatím nejsou součástí simulace.
+
+### Důsledek
+
+Město může být:
+
+- zásobované vlastním hinterlandem;
+- částečně závislé na importu;
+- exportním centrem;
+- zranitelné ztrátou venkovského zázemí.
+
+Tím může budoucí válka, katastrofa nebo politická změna ovlivnit město i bez přímého zásahu do městské buňky.
