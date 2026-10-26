@@ -15,6 +15,16 @@ internal static class Program
         var config = WorldConfig.Default(seed);
         var world = WorldGenerator.Generate(config);
 
+        var validation = WorldValidator.Validate(world);
+        if (validation.Count > 0)
+        {
+            Console.WriteLine("WORLDGEN VALIDATION FAILED:");
+            foreach (var error in validation)
+                Console.WriteLine("- " + error);
+            Environment.ExitCode = 2;
+            return;
+        }
+
         var json = JsonSerializer.Serialize(world, JsonOptions.Pretty);
         File.WriteAllText(output, json);
 
@@ -443,6 +453,66 @@ internal sealed record StartScene(
     List<string> NearbyDestinations,
     List<string> PresentCharacters,
     List<string> ContextActions);
+
+internal static class WorldValidator
+{
+    public static List<string> Validate(GeneratedWorld world)
+    {
+        var errors = new List<string>();
+
+        var settlementIds = world.Settlements.Select(x => x.Id).ToHashSet();
+        var regionIds = world.Regions.Select(x => x.Id).ToHashSet();
+        var factionIds = world.Factions.Select(x => x.Id).ToHashSet();
+        var familyIds = world.Families.Select(x => x.Id).ToHashSet();
+        var characterIds = world.Characters.Select(x => x.Id).ToHashSet();
+
+        foreach (var settlement in world.Settlements)
+            if (!regionIds.Contains(settlement.RegionId))
+                errors.Add($"Settlement {settlement.Id} references missing region {settlement.RegionId}.");
+
+        foreach (var family in world.Families)
+        {
+            if (!settlementIds.Contains(family.HomeSettlementId))
+                errors.Add($"Family {family.Id} references missing settlement {family.HomeSettlementId}.");
+
+            foreach (var member in family.MemberIds)
+                if (!characterIds.Contains(member))
+                    errors.Add($"Family {family.Id} references missing character {member}.");
+        }
+
+        foreach (var character in world.Characters)
+        {
+            if (!familyIds.Contains(character.FamilyId))
+                errors.Add($"Character {character.Id} references missing family {character.FamilyId}.");
+            if (!settlementIds.Contains(character.HomeSettlementId))
+                errors.Add($"Character {character.Id} references missing settlement {character.HomeSettlementId}.");
+            foreach (var faction in character.FactionIds)
+                if (!factionIds.Contains(faction))
+                    errors.Add($"Character {character.Id} references missing faction {faction}.");
+        }
+
+        foreach (var business in world.Businesses)
+        {
+            if (!settlementIds.Contains(business.SettlementId))
+                errors.Add($"Business {business.Id} references missing settlement {business.SettlementId}.");
+            if (!characterIds.Contains(business.OwnerCharacterId))
+                errors.Add($"Business {business.Id} references missing owner {business.OwnerCharacterId}.");
+            foreach (var worker in business.WorkerCharacterIds)
+                if (!characterIds.Contains(worker))
+                    errors.Add($"Business {business.Id} references missing worker {worker}.");
+        }
+
+        foreach (var relation in world.Relationships)
+        {
+            if (!characterIds.Contains(relation.FromCharacterId))
+                errors.Add($"Relationship references missing source {relation.FromCharacterId}.");
+            if (!characterIds.Contains(relation.ToCharacterId))
+                errors.Add($"Relationship references missing target {relation.ToCharacterId}.");
+        }
+
+        return errors;
+    }
+}
 
 internal static class JsonOptions
 {
