@@ -86,7 +86,7 @@ internal static class Program
         bool noAi,
         bool noSemanticAi)
     {
-        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.4 World Graph & Concretization");
+        Console.WriteLine("RPGSandbox – Rabenfeld vertical slice v0.5 Location Graph, Services & Knowledge Routing");
         Console.WriteLine($"Vypravěč: {(noAi ? "fallback bez AI" : rendererModel)}");
         Console.WriteLine($"Interpret významu: {(noSemanticAi ? "jen lokální rychlá pravidla" : semanticModel)}");
         Console.WriteLine($"Save: {Path.GetFullPath(savePath)}");
@@ -108,6 +108,12 @@ internal static class Program
               tak za 3?
               půjdu za Matějem
               můžu se s někým seznámit?
+              jak vypadá místnost?
+              jaký je zde nábytek?
+              jsou v budově další místnosti?
+              jak se dostanu z hostince?
+              co mi může Matěj nabídnout?
+              co obsahuje běžná snídaně?
               vezmu židli a dám ji ke dveřím
 
             Poslední příklad může engine odmítnout, pokud pro něj ještě nemá
@@ -274,6 +280,27 @@ internal sealed class GameEngine
             "visible_people" or "contents" =>
                 EngineResult.Answer(_world.ContentsAnswer(state.Location)),
 
+            "location_description" =>
+                EngineResult.Answer(_world.LocationDescription(state.Location)),
+
+            "furniture" =>
+                EngineResult.Answer(_world.FurnitureAnswer(state.Location)),
+
+            "building_rooms" =>
+                EngineResult.Answer(_world.RoomsInBuildingAnswer(state.Location)),
+
+            "exit_routes" =>
+                EngineResult.Answer(_world.ExitAnswer(state.Location)),
+
+            "service_catalog" =>
+                EngineResult.Answer(_world.ServiceCatalogAnswer(state)),
+
+            "relationship" =>
+                EngineResult.Answer(_world.RelationshipAnswer(subject)),
+
+            "breakfast_detail" =>
+                EngineResult.Answer(_world.BreakfastDetailAnswer()),
+
             "describe" =>
                 EngineResult.Answer(_world.Describe(subject ?? "player", state)),
 
@@ -424,7 +451,7 @@ internal sealed class GameEngine
             return EngineResult.Reject("Adresát otázky není v aktuální lokaci dostupný.");
 
         var topic = command.Subject ?? command.Predicate ?? command.Text ?? "";
-        var knowledge = NpcKnowledge.Answer(target, topic, state);
+        var knowledge = NpcKnowledge.Answer(target, topic, state, _world);
 
         return EngineResult.Ok(
             1,
@@ -633,6 +660,30 @@ internal static class FastSemanticParser
         if (TextNorm.ContainsAny(n, "co vidim", "co je tady", "co je tu"))
             return SemanticCommand.Query("contents");
 
+        if (TextNorm.ContainsAny(n, "jak vypada mistnost", "jak vypada tahle mistnost", "popis mistnosti"))
+            return SemanticCommand.Query("location_description");
+
+        if (TextNorm.ContainsAny(n, "jaky je zde nabytek", "jaky je tu nabytek", "jaky nabytek"))
+            return SemanticCommand.Query("furniture");
+
+        if (TextNorm.ContainsAny(n, "dalsi mistnosti", "jine mistnosti", "kolik je tu mistnosti"))
+            return SemanticCommand.Query("building_rooms");
+
+        if (TextNorm.ContainsAny(n, "jak se dostanu z hostince", "kudy ven", "jak se dostanu ven"))
+            return SemanticCommand.Query("exit_routes");
+
+        if (TextNorm.ContainsAny(n, "jaky mam vztah", "jak se znam s"))
+        {
+            var target = GuessTarget(input) ?? conversationTarget;
+            return SemanticCommand.Query("relationship", subject: target);
+        }
+
+        if (TextNorm.ContainsAny(n, "co obsahuje bezna snidane", "co obsahuje snidane", "z ceho je snidane"))
+            return SemanticCommand.Query("breakfast_detail");
+
+        if (TextNorm.ContainsAny(n, "jideln", "menu", "co nabizi hostinec", "co zde nabizeji"))
+            return SemanticCommand.Query("service_catalog");
+
         if (n.StartsWith("kde je "))
             return SemanticCommand.Query("location_of", subject: input[7..].Trim(' ', '?', '.', '!'));
 
@@ -653,6 +704,12 @@ internal static class FastSemanticParser
             var target = GuessTarget(input);
             if (target is not null)
                 return SemanticCommand.Action("inspect", target: target);
+        }
+
+        if (conversationTarget is not null &&
+            TextNorm.ContainsAny(n, "jak se mas", "jak se dnes mas", "co mi muzes nabidnout", "co nabizis", "co obsahuje snidane"))
+        {
+            return SemanticCommand.Action("ask", target: conversationTarget, subject: input, text: input);
         }
 
         if (TextNorm.ContainsAny(n, "promluvim s", "oslovim", "pozdravim"))
@@ -763,7 +820,9 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
 
             Povolené QUERY op:
             current_location, time, money, inventory, known_people, visible_people,
-            describe, can_perceive, contents, location_of, exists_here, property, available_social_contact
+            describe, can_perceive, contents, location_description, furniture, building_rooms,
+            exit_routes, service_catalog, relationship, breakfast_detail,
+            location_of, exists_here, property, available_social_contact
 
             Zásady:
             - Neodhaduj výsledek akce.
@@ -778,6 +837,14 @@ internal sealed class OllamaSemanticInterpreter : ISemanticInterpreter, IDisposa
             - "Vidím X?" je query can_perceive.
             - "Co mám u sebe?" je query inventory.
             - "Co vidím?" je query contents.
+            - "Jak vypadá místnost?" je query location_description.
+            - "Jaký je zde nábytek?" je query furniture.
+            - "Jsou v budově další místnosti?" je query building_rooms.
+            - "Jak se dostanu z hostince?" je query exit_routes.
+            - "Jaký mám vztah s Matějem?" je query relationship, subject "Matěj".
+            - "Máte jídelní lístek?" nebo "Co hostinec nabízí?" je query service_catalog.
+            - "Co obsahuje běžná snídaně?" je query breakfast_detail.
+            - Pokud CURRENT CONVERSATION existuje a hráč mluví ve 2. osobě (např. "Jak se dnes máš?"), preferuj action ask před world query.
             - "Dám si pivo" je action request se subject "pivo"; nevymýšlej cenu.
             - "Prodávají zde pivo a kolik stojí?" je query property, subject "pivo", predicate "availability_and_price".
             - "Je tu ještě někdo kromě Matěje?" je query contents nebo exists_here podle formulace.
@@ -853,7 +920,9 @@ internal static class SemanticValidator
     private static readonly HashSet<string> QueryOps =
     [
         "current_location", "time", "money", "inventory", "known_people", "visible_people",
-        "describe", "can_perceive", "contents", "location_of", "exists_here", "property", "available_social_contact"
+        "describe", "can_perceive", "contents", "location_description", "furniture", "building_rooms",
+        "exit_routes", "service_catalog", "relationship", "breakfast_detail",
+        "location_of", "exists_here", "property", "available_social_contact"
     ];
 
     public static ValidationResult Validate(SemanticCommand command, WorldState state)
@@ -873,17 +942,20 @@ internal static class SemanticValidator
 
 internal static class NpcKnowledge
 {
-    public static KnowledgeAnswer Answer(string npc, string topic, WorldState state)
+    public static KnowledgeAnswer Answer(string npc, string topic, WorldState state, WorldGraph world)
     {
         var t = TextNorm.Normalize(topic);
 
         if (npc == "Matěj")
         {
-            if (TextNorm.ContainsAny(t, "jak se mas", "zdravi", "jak se dari"))
+            if (TextNorm.ContainsAny(t, "jak se mas", "jak se dnes mas", "zdravi", "jak se dari"))
                 return new("Matěj je v pořádku a právě pracuje v hostinci.", null);
 
-            if (TextNorm.ContainsAny(t, "jidlo", "snidan", "jist"))
-                return new("Matěj může nabídnout běžnou snídani; konkrétní složení není definováno.", "snídaně");
+            if (TextNorm.ContainsAny(t, "co mi muzes nabidnout", "co nabizis", "zbozi", "jideln", "menu", "jidlo", "pit"))
+                return new(world.ServiceCatalogAnswer(state), null);
+
+            if (TextNorm.ContainsAny(t, "co obsahuje", "snidan"))
+                return new(world.BreakfastDetailAnswer(), "snídaně");
 
             if (TextNorm.ContainsAny(t, "rusno", "trh", "namesti"))
                 return new("Dnes je tržní den a náměstí bývá během tržního dne rušnější.", "trh");
