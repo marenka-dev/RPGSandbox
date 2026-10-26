@@ -202,4 +202,6 @@ Porovnej hlavně, zda:
 - žádná detailní zaměstnání všech jednotlivců;
 - žádná historická změna ekonomiky.
 
-Další logický krok bude **v0.5 – Trade & Market**: přebytky jednoho sídla budou moci pokrývat deficit jiného sídla pouze přes existující cestní síť a za dopravní náklady.
+Před Trade & Market vložíme ještě mezikrok **v0.4.1 – Economic Consistency**: práce → výrobní jednotky → kapacita → skutečná produkce musí být jedna kauzální větev, ne paralelní výpočty.
+
+Současně je schválen další prostorový princip pro pozdější Settlement Spatial Model: regionální buňka s městem není jedna obří scéna. Vstup do sídla vede přes konkrétní entry point do hierarchie čtvrtí, ulic, budov a lokálních scén. Kontextové akce se vždy odvozují jen z aktuální scény, nikoli ze všech obyvatel a podniků sídla.
