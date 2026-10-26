@@ -19,6 +19,7 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 - [Generování světa, World Graph a lazy concretization](docs/world-graph-and-concretization.md)
 - [RPG mechaniky](docs/rpg-mechanics.md)
 - [Simulace světa](docs/world-simulation.md)
+- [World Generator – generování světa před prvním tahem](docs/world-generator.md)
 - [Znalostní model světa](docs/knowledge-model.md)
 - [Tvorba světa a hráčské postavy](docs/world-and-character-creation.md)
 - [Model postav a NPC](docs/character-model.md)
@@ -35,9 +36,10 @@ AI zde nemá být databází ani jediným zdrojem pravdy. Herní engine drží s
 
 ## Prototypy
 
+- [World Generator v0.1 – svět před prvním tahem](prototype/worldgen/README.md)
 - [Rabenfeld vertical slice – první souvislá hratelná smyčka](prototype/vertical-slice/README.md)
 - [Lokální AI: české dialogy a měření odezvy](prototype/local-ai/README.md)
 
 ## Stav projektu
 
-Projekt přešel z čistě koncepční fáze do raného prototypování. Aktuální vertical slice ověřuje souvislou herní smyčku, kanonický stav v SQLite, Engine Contract a lokální AI pouze jako narativní renderer.
+Projekt přešel z čistě koncepční fáze do raného prototypování. Po experimentech s přirozeným vstupem se aktuální těžiště přesunulo na World Generator: nejprve vytvořit konzistentní svět a konkrétní scénu, teprve potom nad nimi stavět AI interpretaci a narativ.
