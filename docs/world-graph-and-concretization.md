@@ -138,3 +138,38 @@ Nová obchodní položka:
 Jakmile concretizer vytvoří detail, uloží se stejně jako ostatní kanonická fakta. Při dalším spuštění hry se znovu negeneruje.
 
 Cílem je, aby hráč nikdy nepoznal rozdíl mezi entitou vytvořenou při worldgen a entitou konkretizovanou později: obě jsou po vzniku plnohodnotnou součástí stejného světa.
+
+
+## Location Graph a služby
+
+Od v0.5 World Graph reprezentuje i vnitřní strukturu lokací a podniků.
+
+Lokace mohou být propojené obecnými vztahy:
+
+```text
+room --part_of--> building
+room --adjacent_to--> room/location
+door --connects--> location
+object --location--> room
+business --offers--> service/item
+```
+
+Díky tomu dotazy na nábytek, dveře, okna, další místnosti nebo cestu ven nejsou speciální herní funkce. Jsou to dotazy nad stejným grafem jako ostatní fakta světa.
+
+Služby podniků jsou rovněž entity. Mohou začít v abstraktním stavu a být bezpečně konkretizovány až při potřebě detailu. Například snídaně může od worldgenu existovat jako nabídka typu `breakfast`, ale konkrétní složení vznikne až při prvním relevantním dotazu podle pravidel dané kultury, období, ekonomiky a typu podniku.
+
+## Knowledge routing NPC
+
+NPC nemá mít ručně napsanou odpověď na každou možnou větu. Otázka se nejprve přeloží na téma a engine určí, které části World Graphu jsou pro dané NPC dostupné.
+
+Příklad:
+
+```text
+hráč -> "Co mi můžeš nabídnout?"
+Matěj -> works_at -> U Tří korun
+U Tří korun -> offers -> služby a položky
+```
+
+Engine sestaví povolené znalosti Matěje z těchto vazeb a teprve narativní model je přirozeně vysloví.
+
+Aktivní konverzační partner má při interpretaci přirozeného dialogu přednost před obecným world query. Věta ve druhé osobě jako „Jak se dnes máš?“ se proto nejdřív interpretuje jako otázka aktuálnímu partnerovi.
