@@ -1,84 +1,135 @@
-# World Generator v0.1
+# World Generator v0.2 – Procedural Region
 
-Tento prototyp je oddělený od narativního vertical slice. Jeho úkolem není chápat volný text ani generovat prózu, ale vytvořit **svět před prvním tahem hráče**.
+v0.2 je první verze, ve které **seed skutečně mění vznik regionu**. Rabenfeld, Linden ani Hvozdec už nejsou pevně vložený obsah worldgenu.
 
-## Co v0.1 generuje
+## Co řídí generování
 
-Z jednoho deterministic seed vzniká snapshot obsahující:
+Výsledný svět vzniká z:
 
-- regiony a jejich klima, terén, zdroje a populaci;
-- sídla a dopravní vazby;
-- frakce a základní mocenské zájmy;
-- rodiny;
-- persistentní postavy;
-- podniky a jejich vlastníky/pracovníky;
-- vztahy mezi postavami;
-- strukturovanou historii;
-- konkrétní startovní lokální scénu;
-- kontextové akce odvozené ze startovní scény.
+```text
+WorldConfig
++ Seed
++ generační pravidla
++ později historická simulace
+```
 
-v0.1 používá ještě jednoduchá pravidla a šablony. Cílem je ověřit **pipeline a úroveň detailu**, ne vytvořit definitivní generátor.
+### WorldConfig
+
+Aktuálně obsahuje například:
+
+- éru a technologickou úroveň;
+- realismus a fantasy;
+- rozsah simulace;
+- klimatický bias;
+- politickou stabilitu;
+- hloubku ekonomiky;
+- počet let historie.
+
+Hráč později nebude nastavovat všechny interní hodnoty. Má volit charakter světa a engine z něj odvodí podrobné parametry.
+
+### Seed
+
+Seed vybírá konkrétní variantu uvnitř těchto pravidel:
+
+- vlhkost;
+- teplotu;
+- nadmořský charakter;
+- úrodnost;
+- lesnatost;
+- dostupnost vody;
+- obchodní průchodnost;
+- zdroje;
+- velikost populace;
+- počet a typ sídel;
+- názvy;
+- podniky;
+- část sociální struktury.
+
+Stejný config + stejný seed musí vytvořit stejný svět.
+
+## Příčinná pipeline v0.2
+
+```text
+seed + WorldConfig
+        ↓
+teplota / vlhkost / reliéf
+        ↓
+klima
+        ↓
+úrodnost / lesnatost / voda / obchodní průchodnost
+        ↓
+přírodní zdroje
+        ↓
+nosná kapacita regionu a populace
+        ↓
+počet a typ sídel
+        ↓
+ekonomické specializace sídel
+        ↓
+podniky podle zdrojů a populace
+        ↓
+rodiny a lehké persistentní NPC
+        ↓
+vlastníci a pracovníci
+        ↓
+lokální frakce a vztahy
+        ↓
+základní historie
+        ↓
+startovní scéna z vygenerovaného regionu
+```
+
+Důležitý rozdíl proti v0.1:
+
+Mlýn už nevzniká proto, že je v kódu „Lindenský mlýn“. Vzniká pouze tehdy, když má sídlo dost obyvatel, region produkuje obilí a je dostupná voda.
+
+Podobně hostince, pekárny, kovárny, dřevorubecké provozy a obchodní podniky vycházejí z prostředí.
 
 ## Spuštění
 
-Z kořene repozitáře:
-
 ```powershell
 cd prototype\worldgen
-dotnet run
+dotnet run -- --seed 111
+dotnet run -- --seed 222
+dotnet run -- --seed 333
 ```
 
-Vlastní seed:
+Můžeš také ovlivnit charakter regionu:
 
 ```powershell
-dotnet run -- --seed 12345
+dotnet run -- --seed 111 --climate cold
+dotnet run -- --seed 111 --climate dry
+dotnet run -- --seed 111 --climate wet
+dotnet run -- --seed 111 --climate mountain
 ```
 
-Vlastní výstup:
+Politická stabilita:
 
 ```powershell
-dotnet run -- --seed 12345 --out moje-hra.json
+dotnet run -- --seed 111 --politics low
 ```
 
-Stejný seed musí vytvořit stejný svět.
+Aktuální hodnoty jsou prototypové a budou se dál kalibrovat.
 
-## Důležitá zásada
+## Co sledovat při testu
 
-Startovní scéna se negeneruje z prázdna. Vychází z již vytvořeného regionu a jeho dopravních/geografických vazeb.
+Porovnej zejména:
 
-Budoucí pipeline:
+- název regionu;
+- klima a terén;
+- úrodnost, lesnatost, vodu a obchodní průchodnost;
+- přírodní zdroje;
+- populaci regionu;
+- počet a velikost sídel;
+- ekonomické specializace;
+- vzniklé podniky;
+- frakce;
+- startovní scénu.
 
-```text
-WorldConfig + Seed
-        ↓
-geografie a regiony
-        ↓
-sídla a dopravní síť
-        ↓
-populace a rodiny
-        ↓
-postavy, profese, podniky
-        ↓
-frakce a politika
-        ↓
-vztahy
-        ↓
-historická simulace
-        ↓
-současný stav světa
-        ↓
-výběr startovní oblasti
-        ↓
-lokální scéna v plném detailu
-        ↓
-kontextové možnosti hráče
-```
+Různé seedy už mají produkovat **skutečně odlišné regiony**, ne stejnou šablonu s jiným číslem.
 
-## Co budeme ověřovat dál
+## Co v0.2 ještě není
 
-- jak velkou část populace vytvářet persistentně při worldgenu;
-- jak generovat rodokmeny bez nekonzistencí;
-- jak svázat profese s ekonomikou a podniky;
-- jak nechat historii skutečně měnit současný stav místo pouhého seznamu událostí;
-- jak generovat lokální scénu z geografického podkladu;
-- jak odvodit nabídnutelné akce čistě z přítomných entit a jejich affordances.
+Historie je zatím spíš odvozená kronika a ještě plně nemění současný stav světa. Populace je reprezentována jen omezenou sadou důležitějších persistentních rodin a NPC, ne všemi obyvateli. Geografie zatím není skutečná 2D mapa.
+
+Další důležitý krok bude spojit **historickou simulaci se současným stavem** a rozhodnout, jak reprezentovat prostor regionu tak, aby umístění řek, cest, sídel a zdrojů nebylo pouze seznam vlastností.
