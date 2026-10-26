@@ -81,3 +81,39 @@ Rodinná příslušnost je kanonická vazba používaná na více místech, niko
 ## Atmosféra a dostupnost informací
 
 Nezahlcovat hlavní obrazovku tabulkami ani skrytými RPG hody. Stavový panel ukazuje jen rychle využitelné údaje, ostatní podrobnosti se otevírají na požádání. Grafika a text doplňují skutečný stav světa, nevytvářejí nové kanonické skutečnosti samy o sobě.
+
+
+## Rozsah kontextových akcí
+
+Kontextový panel nezobrazuje úplný seznam akcí nad celou regionální buňkou ani nad celým sídlem.
+
+Zobrazuje pouze relevantní akce odvozené z:
+
+- aktuální lokální scény;
+- právě viditelných nebo přímo dosažitelných entit;
+- hráčových známých cílů a lokací;
+- současných affordances prostředí.
+
+Při vstupu do města se tedy nejprve zobrazí konkrétní vstupní scéna, například brána nebo ulice. Až pohyb do další části sídla změní množinu viditelných osob, podniků, budov a akcí.
+
+Příklad:
+
+```text
+Východní brána
+viditelné:
+- 2 strážní
+- oznámení
+- stáje
+- hlavní ulice
+
+akce:
+- promluvit se strážným
+- prohlédnout oznámení
+- jít ke stájím
+- vstoupit do hlavní ulice
+- vrátit se za město
+```
+
+Nezobrazují se automaticky všechny podniky a všichni obyvatelé sídla.
+
+Tento princip je zásadní pro čitelnost UI i pro zachování znalostního modelu.
