@@ -270,3 +270,89 @@ v0.4.1 přidává první jednoduchou textilní výrobu. Sídla s pastvinami maj�
 ### Další krok
 
 Až tento model projde testem, dává smysl přejít na **Trade & Market**: přebytky a deficity mezi sídly, přeprava přes existující cesty a následně ceny.
+
+
+## v0.4.2 – Resource Capacity
+
+v0.4.2 přidává fyzickou kapacitu přírodních zdrojů. Zdroj už není pouze informace typu „v okolí je obilí / les / ruda“.
+
+Každé sídlo může mít explicitní `ResourceCapacity`:
+
+- typ zdroje;
+- dostupnou plochu;
+- kvalitu;
+- maximální počet pracovníků;
+- maximální roční výstup.
+
+Aktuálně se modelují zejména:
+
+- `farmland`;
+- `forest`;
+- `iron_deposit`;
+- `fishery`.
+
+### Nová kauzalita
+
+```text
+geografie
+→ lokální fyzický zdroj
+→ jeho kapacita
+→ maximum pracovníků
+→ výrobní jednotky
+→ maximální výstup
+→ skutečná produkce
+```
+
+Počet zemědělců, dřevorubců, horníků a rybářů je nyní omezen kapacitou lokálního prostředí.
+
+To znamená, že růst populace už automaticky nevytvoří proporcionálně více pracovníků v primární produkci.
+
+### Zemědělství
+
+Zemědělská kapacita vychází z množství vhodných okolních buněk a jejich úrodnosti.
+
+```text
+usable farmland area
++ fertility
+→ max workers
+→ max annual food output
+```
+
+Produkce rodinných hospodářství a velkých statků se dělí z jednoho společného maxima.
+
+### Les, ruda a rybolov
+
+Stejný princip se používá pro:
+
+```text
+forest
+→ sustainable extraction capacity
+
+iron deposit
+→ mining capacity
+
+river/fish resource
+→ fishing capacity
+```
+
+v0.4.2 ještě neřeší dlouhodobé vyčerpávání zásob nebo regeneraci lesa v čase. Připravuje ale datový základ, aby tyto změny bylo možné později simulovat.
+
+### Co sledovat při testu
+
+Ve výstupu se nově objeví:
+
+```text
+kapacity zdrojů:
+farmland area:... quality:... workers≤... output≤...
+forest area:... quality:... workers≤... output≤...
+...
+```
+
+Sleduj hlavně:
+
+1. zda se počet pracovníků v primárních profesích vejde do limitu zdroje;
+2. zda sídla s menší zemědělskou kapacitou mohou mít významný deficit jídla;
+3. zda větší populace automaticky nevede k téměř přesné potravinové soběstačnosti;
+4. zda rozdílná geografie vytváří rozdílné fyzické limity.
+
+Po ověření této vrstvy může **v0.5 Trade & Market** pracovat s přebytky a deficity, které už mají skutečnou fyzickou příčinu.
