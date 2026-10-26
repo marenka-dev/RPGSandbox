@@ -440,6 +440,26 @@ internal sealed class WorldGraph : IDisposable
                 ? "Ano. Na náměstí je více tržních stánků."
                 : "V této lokaci tržní stánky neeviduješ.";
 
+        if (n.Contains("dver"))
+        {
+            var matches = VisibleNames(state.Location)
+                .Where(x => TextNorm.Normalize(x).Contains("dver"))
+                .ToList();
+            return matches.Count == 0
+                ? "V aktuální lokaci žádné dveře neeviduješ."
+                : $"Ano. Vidíš zde: {string.Join(", ", matches)}.";
+        }
+
+        if (n.Contains("okn"))
+        {
+            var matches = VisibleNames(state.Location)
+                .Where(x => TextNorm.Normalize(x).Contains("okn"))
+                .ToList();
+            return matches.Count == 0
+                ? "V aktuální lokaci žádné okno neeviduješ."
+                : $"Ano. Vidíš zde: {string.Join(", ", matches)}.";
+        }
+
         var id = ResolveEntityId(raw);
         if (id is not null)
             return IsVisible(raw, state.Location)
