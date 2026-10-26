@@ -570,8 +570,7 @@ internal static class WorldGenerator
     private static void AssignHouseholdOccupations(
         Random rng,
         List<Household> households,
-        Dictionary<string, List<JobDemand>> jobDemand,
-        List<ResourceCapacity> capacities)
+        Dictionary<string, List<JobDemand>> jobDemand)
     {
         foreach (var group in households.GroupBy(x => x.SettlementId))
         {
