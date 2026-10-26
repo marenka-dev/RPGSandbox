@@ -220,3 +220,71 @@ klima + reliéf
 ```
 
 Tím se chceme vyhnout nezávislému náhodnému generování prvků, které by spolu nedávaly smysl.
+
+
+## Prostorová vrstva regionu
+
+Od v0.3 má region skutečnou prostorovou reprezentaci.
+
+Každá buňka regionu má vlastní fyzické vlastnosti:
+
+```text
+MapCell
+- x / y
+- elevation
+- moisture
+- temperature
+- fertility
+- forest_cover
+- has_river
+- terrain
+- local_resources
+```
+
+Sídla se umísťují do konkrétních buněk na základě vhodnosti prostředí. Ekonomické specializace a podniky se odvozují z lokálně dosažitelných zdrojů, ne z globálního seznamu zdrojů regionu.
+
+To znamená, že dva body stejného regionu mohou mít zcela odlišnou ekonomiku.
+
+### Prostorová kauzalita
+
+```text
+konkrétní buňka mapy
+→ voda / půda / les / ruda / reliéf
+→ vhodnost pro osídlení
+→ vznik sídla
+→ lokální dostupné zdroje
+→ specializace sídla
+→ podniky a pracovní místa
+```
+
+### Cesty
+
+Sídla jsou propojena explicitními Road entitami. Cesta obsahuje skutečnou trasu přes souřadnice mapy.
+
+První verze používá jednoduchou trasu mezi sídly. Budoucí pathfinding má zohlednit:
+- sklon terénu;
+- řeky a brody;
+- mokřady;
+- lesy;
+- průsmyky;
+- existující cesty.
+
+### Populační účetnictví
+
+Regionální populace se musí přesně rozdělit:
+
+```text
+total_population =
+settled_population
++ rural_households
++ small_hamlets
++ isolated_population
+```
+
+Tím nevzniká nevysvětlená populace mimo sídla.
+
+### Stabilní RNG streamy
+
+Každý subsystém používá vlastní random stream odvozený ze stejného root seedu.
+
+Změna parametru politiky proto nesmí spotřebou náhodných čísel změnit geografii. Tento princip je důležitý pro reprodukovatelnost, testování i budoucí migrace saveů.
