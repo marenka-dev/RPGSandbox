@@ -153,3 +153,41 @@ SettlementEconomy.Production
 Tento invariant musí kontrolovat automatický validator.
 
 Budoucí simulace změny pracovní síly, požáru, bankrotu, války nebo nedostatku vstupů má měnit konkrétní ProductionUnit, ze které se následně přepočítá stav sídla.
+
+
+## 12. Resource Capacity – fyzické limity primární produkce
+
+Primární ekonomická produkce musí být omezená fyzickou dostupností zdroje, ne pouze množstvím pracovní síly.
+
+```text
+ResourceCapacity
+- resource type
+- available area / accessible reserve
+- quality
+- max workers
+- max annual output
+```
+
+Příklady:
+
+```text
+farmland + fertility
+→ agricultural capacity
+
+forest + density
+→ forestry capacity
+
+ore deposit + accessibility
+→ mining capacity
+
+river/fishing grounds
+→ fishing capacity
+```
+
+Základní invariant:
+
+> Přidání dalších pracovníků nad kapacitu zdroje nesmí automaticky zvýšit produkci.
+
+Počet pracovníků v primárních profesích se proto omezuje přes `ResourceCapacity.MaxWorkers` a jejich výstup přes `MaxAnnualOutput`.
+
+Budoucí simulace doplní zejména zásobu zdroje, obnovitelnost, vyčerpávání, sezónnost, technologické změny a škody způsobené událostmi.
