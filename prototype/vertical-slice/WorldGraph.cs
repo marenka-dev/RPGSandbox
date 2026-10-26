@@ -4,7 +4,7 @@ using System.Globalization;
 namespace RPGSandbox.VerticalSlice;
 
 /// <summary>
-/// Small persistent world graph for v0.4.
+/// Persistent world graph for v0.5.
 /// It separates objective facts from what the player knows and supports
 /// deterministic lazy concretization of previously unspecified detail.
 /// </summary>
@@ -66,8 +66,14 @@ internal sealed class WorldGraph : IDisposable
         AddEntity("group.market.townspeople", "PopulationGroup", "měšťané na trhu", "macro");
         AddEntity("group.inn.patrons", "PopulationGroup", "další hosté v hostinci", "macro");
         AddEntity("feature.market.stalls", "FeatureGroup", "tržní stánky", "macro");
-        AddEntity("object.chair.room", "Object", "židle", "seed");
-        AddEntity("object.door.room", "Object", "dveře", "seed");
+        AddEntity("object.chair.room", "Furniture", "židle v pokoji", "seed");
+        AddEntity("object.table.common", "Furniture", "stůl ve společenské místnosti", "seed");
+        AddEntity("object.chair.common", "Furniture", "židle ve společenské místnosti", "seed");
+        AddEntity("object.window.common", "Object", "okno ve společenské místnosti", "seed");
+        AddEntity("object.door.room", "Object", "dveře pokoje", "seed");
+        AddEntity("object.door.common", "Object", "vchodové dveře hostince", "seed");
+        AddEntity("loc.street.inn", "Location", "ulice před hostincem U Tří korun", "seed");
+        AddEntity("service.inn.breakfast", "MealOffering", "běžná snídaně U Tří korun", "seed");
 
         AddFact("player", "location", LocationIdToEntity(state.Location));
         AddFact("player", "money_groats", value: state.MoneyGroats.ToString(CultureInfo.InvariantCulture));
@@ -83,8 +89,21 @@ internal sealed class WorldGraph : IDisposable
 
         AddFact("place.inn", "contains_location", "loc.inn.room");
         AddFact("place.inn", "contains_location", "loc.inn.common");
+        AddFact("place.inn", "contains_location", "loc.street.inn");
         AddFact("place.inn", "service_category", value: "food_and_drink");
         AddFact("place.inn", "ordinary_medieval_inn", value: "true");
+        AddFact("place.inn", "offers", "service.inn.breakfast");
+
+        AddFact("loc.inn.room", "part_of", "place.inn");
+        AddFact("loc.inn.common", "part_of", "place.inn");
+        AddFact("loc.street.inn", "adjacent_to", "loc.inn.common");
+        AddFact("loc.inn.common", "adjacent_to", "loc.street.inn");
+        AddFact("loc.inn.common", "adjacent_to", "loc.inn.room");
+        AddFact("loc.inn.room", "adjacent_to", "loc.inn.common");
+
+        AddFact("service.inn.breakfast", "offered_at", "place.inn");
+        AddFact("service.inn.breakfast", "category", value: "breakfast");
+        AddFact("service.inn.breakfast", "detail_status", value: "abstract");
 
         AddFact("group.market.townspeople", "location", "loc.market");
         AddFact("group.market.townspeople", "population_kind", value: "generic_people");
@@ -96,9 +115,23 @@ internal sealed class WorldGraph : IDisposable
         AddFact("object.chair.room", "location", "loc.inn.room");
         AddFact("object.chair.room", "movable", value: "true");
         AddFact("object.chair.room", "carryable", value: "true");
+
+        AddFact("object.table.common", "location", "loc.inn.common");
+        AddFact("object.chair.common", "location", "loc.inn.common");
+        AddFact("object.chair.common", "movable", value: "true");
+        AddFact("object.chair.common", "carryable", value: "true");
+        AddFact("object.window.common", "location", "loc.inn.common");
+        AddFact("object.window.common", "window", value: "true");
+
         AddFact("object.door.room", "location", "loc.inn.room");
         AddFact("object.door.room", "openable", value: "true");
         AddFact("object.door.room", "blockable", value: "true");
+        AddFact("object.door.room", "connects", "loc.inn.common");
+
+        AddFact("object.door.common", "location", "loc.inn.common");
+        AddFact("object.door.common", "openable", value: "true");
+        AddFact("object.door.common", "blockable", value: "true");
+        AddFact("object.door.common", "connects", "loc.street.inn");
 
         KnowEntity("person.matej");
         KnowEntity("place.inn");
@@ -159,7 +192,14 @@ internal sealed class WorldGraph : IDisposable
         if (n.Contains("namest") || n.Contains("trh")) return "loc.market";
         if (n.Contains("pokoj")) return "loc.inn.room";
         if (n.Contains("spolecensk") || n.Contains("mistnost")) return "loc.inn.common";
+        if (n.Contains("ulic") || n.Contains("ven z hostince") || n == "ven") return "loc.street.inn";
+        if (n.Contains("jideln") || n.Contains("menu") || n.Contains("nabidk")) return "place.inn";
+        if (n.Contains("snidan")) return "service.inn.breakfast";
+        if (n.Contains("okn") && n.Contains("spolec")) return "object.window.common";
+        if (n.Contains("okn")) return "object.window.common";
+        if (n.Contains("zidl") && n.Contains("spolec")) return "object.chair.common";
         if (n.Contains("zidl")) return "object.chair.room";
+        if (n.Contains("dver") && (n.Contains("vchod") || n.Contains("hostinc"))) return "object.door.common";
         if (n.Contains("dver")) return "object.door.room";
         if (n.Contains("stan")) return "feature.market.stalls";
         if (n.Contains("host") || n.Contains("nekdo dalsi")) return "group.inn.patrons";
@@ -257,6 +297,85 @@ internal sealed class WorldGraph : IDisposable
             : $"V aktuální lokaci vnímáš: {string.Join(", ", names)}.";
     }
 
+    public string LocationDescription(LocationId location)
+    {
+        var locId = LocationIdToEntity(location);
+        var contents = NamesForFact("location", locId)
+            .Where(x => x != "ty")
+            .ToList();
+
+        var exits = ObjectNamesForFact(locId, "adjacent_to");
+        var text = $"Jsi v lokaci {EntityName(locId)}.";
+        if (contents.Count > 0)
+            text += $" Vidíš zde: {string.Join(", ", contents)}.";
+        if (exits.Count > 0)
+            text += $" Z lokace se lze dostat do: {string.Join(", ", exits)}.";
+        return text;
+    }
+
+    public string FurnitureAnswer(LocationId location)
+    {
+        var locId = LocationIdToEntity(location);
+        var furniture = EntityNamesByTypeAndLocation("Furniture", locId);
+        return furniture.Count == 0
+            ? "V této lokaci zatím nemáš konkretizovaný žádný nábytek."
+            : $"Z nábytku zde vidíš: {string.Join(", ", furniture)}.";
+    }
+
+    public string RoomsInBuildingAnswer(LocationId location)
+    {
+        var locId = LocationIdToEntity(location);
+        var buildingId = FactObject(locId, "part_of") ?? (location is LocationId.InnRoom or LocationId.InnCommonRoom ? "place.inn" : null);
+        if (buildingId is null)
+            return "Pro aktuální lokaci není evidována nadřazená budova.";
+
+        var rooms = ObjectNamesForFact(buildingId, "contains_location")
+            .Where(x => !TextNorm.Normalize(x).Contains("ulice"))
+            .ToList();
+        return rooms.Count == 0
+            ? "V budově zatím nejsou evidované další místnosti."
+            : $"V budově jsou evidované tyto prostory: {string.Join(", ", rooms)}.";
+    }
+
+    public string ExitAnswer(LocationId location)
+    {
+        var locId = LocationIdToEntity(location);
+        var exits = ObjectNamesForFact(locId, "adjacent_to");
+        return exits.Count == 0
+            ? "Z této lokace zatím není v grafu evidovaná cesta ven."
+            : $"Z této lokace vede cesta do: {string.Join(", ", exits)}.";
+    }
+
+    public string ServiceCatalogAnswer(WorldState state)
+    {
+        var items = ObjectNamesForFact("place.inn", "offers");
+        var beer = FindEntityByNameContains("pivo");
+        if (beer is not null && !items.Contains(EntityName(beer)))
+            items.Add(EntityName(beer));
+
+        return items.Count == 0
+            ? "Hostinec zatím nemá konkretizovanou žádnou nabídku."
+            : $"Hostinec nabízí: {string.Join(", ", items)}.";
+    }
+
+    public string RelationshipAnswer(string? raw)
+    {
+        var id = ResolveEntityId(raw);
+        if (id != "person.matej")
+            return "K této osobě zatím nemáš evidovaný vztah.";
+
+        return "Matěje znáš z několika návštěv. Vztah je zatím neutrálně přátelský; přesné číselné hodnoty vztahových dimenzí prototyp ještě neukládá.";
+    }
+
+    public string BreakfastDetailAnswer()
+    {
+        var id = ConcretizeBreakfastDetail();
+        var parts = ObjectNamesForFact(id, "contains");
+        return parts.Count == 0
+            ? "Běžná snídaně zatím nemá konkretizované složení."
+            : $"Běžná snídaně obsahuje: {string.Join(", ", parts)}.";
+    }
+
     public string PropertyAnswer(string? raw, string? predicate, WorldState state)
     {
         var id = ResolveEntityId(raw);
@@ -288,6 +407,15 @@ internal sealed class WorldGraph : IDisposable
             var price = FactValue(id, "price_groats");
             return $"Ano. Hostinec U Tří korun nabízí pivo za {price} groš.";
         }
+
+        if (id == "loc.inn.common" && (p.Contains("appearance") || p.Contains("vzhled") || p.Contains("popis")))
+            return LocationDescription(LocationId.InnCommonRoom);
+
+        if (id == "place.inn" && (p.Contains("offer") || p.Contains("nabid") || p.Contains("menu") || p.Contains("jideln")))
+            return ServiceCatalogAnswer(state);
+
+        if (id == "service.inn.breakfast" && (p.Contains("contain") || p.Contains("obsah") || p.Contains("slozen")))
+            return BreakfastDetailAnswer();
 
         var value = FactValue(id, predicate ?? "");
         if (value is not null)
@@ -342,7 +470,10 @@ internal sealed class WorldGraph : IDisposable
         if (id is null) return null;
 
         if (EntityType(id) == "Location")
+        {
+            if (id == "loc.street.inn") return LocationId.MarketSquare;
             return EntityToLocationId(id);
+        }
 
         if (EntityType(id) == "Business" && id == "place.inn")
             return LocationId.InnCommonRoom;
@@ -452,6 +583,20 @@ internal sealed class WorldGraph : IDisposable
         AddFact(id, "price_groats", value: "1");
         AddFact(id, "consumable", value: "true");
         return id;
+    }
+
+    private string ConcretizeBreakfastDetail()
+    {
+        const string breakfastId = "service.inn.breakfast";
+        if (FactValue(breakfastId, "detail_status") == "concrete")
+            return breakfastId;
+
+        AddEntity("food.bread.threecrowns", "Food", "chléb", "lazy:breakfast");
+        AddEntity("food.cheese.threecrowns", "Food", "sýr", "lazy:breakfast");
+        AddFact(breakfastId, "contains", "food.bread.threecrowns");
+        AddFact(breakfastId, "contains", "food.cheese.threecrowns");
+        ReplaceFact(breakfastId, "detail_status", value: "concrete");
+        return breakfastId;
     }
 
     private string ConcretizeMarketNpc()
@@ -582,6 +727,42 @@ internal sealed class WorldGraph : IDisposable
             """;
         cmd.Parameters.AddWithValue("$p", predicate);
         cmd.Parameters.AddWithValue("$o", objectId);
+        using var reader = cmd.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read()) result.Add(reader.GetString(0));
+        return result;
+    }
+
+    private List<string> ObjectNamesForFact(string subject, string predicate)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            SELECT e.name
+            FROM world_facts f
+            JOIN world_entities e ON e.id=f.object_id
+            WHERE f.subject=$s AND f.predicate=$p AND f.object_id IS NOT NULL
+            ORDER BY e.name;
+            """;
+        cmd.Parameters.AddWithValue("$s", subject);
+        cmd.Parameters.AddWithValue("$p", predicate);
+        using var reader = cmd.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read()) result.Add(reader.GetString(0));
+        return result;
+    }
+
+    private List<string> EntityNamesByTypeAndLocation(string type, string locationId)
+    {
+        using var cmd = _db.CreateCommand();
+        cmd.CommandText = """
+            SELECT e.name
+            FROM world_entities e
+            JOIN world_facts f ON f.subject=e.id
+            WHERE e.type=$t AND f.predicate='location' AND f.object_id=$l
+            ORDER BY e.name;
+            """;
+        cmd.Parameters.AddWithValue("$t", type);
+        cmd.Parameters.AddWithValue("$l", locationId);
         using var reader = cmd.ExecuteReader();
         var result = new List<string>();
         while (reader.Read()) result.Add(reader.GetString(0));
