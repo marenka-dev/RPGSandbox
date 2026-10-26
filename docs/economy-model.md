@@ -191,3 +191,51 @@ Základní invariant:
 Počet pracovníků v primárních profesích se proto omezuje přes `ResourceCapacity.MaxWorkers` a jejich výstup přes `MaxAnnualOutput`.
 
 Budoucí simulace doplní zejména zásobu zdroje, obnovitelnost, vyčerpávání, sezónnost, technologické změny a škody způsobené událostmi.
+
+
+## 13. Hinterland a kalibrace jednotek
+
+Ekonomika sídla zahrnuje jeho městskou či vesnickou populaci i přiřazené venkovské hospodářské zázemí.
+
+```text
+EconomicPopulation
+=
+SettlementPopulation
++
+HinterlandPopulation
+```
+
+Hinterland poskytuje pracovní sílu i fyzické zdroje primární produkce.
+
+### Prostorové vlastnictví kapacity
+
+Mapová buňka se pro účely worldgenu primární ekonomiky přiřadí jednomu nejbližšímu sídlu. Tím se kapacity při počátečním výpočtu neduplikují.
+
+Později se může skutečné vlastnictví půdy, politická jurisdikce a obchodní využití lišit; hinterland zde představuje hlavně hospodářskou dostupnost a spádovost.
+
+### Normalizované roční jednotky
+
+Prototyp používá person-equivalent jednotky základní roční potřeby.
+
+Potraviny:
+
+```text
+1 food unit
+=
+basic annual food need of one person
+```
+
+Ostatní kategorie používají menší relativní roční potřebu.
+
+Tyto jednotky jsou simulační abstrakce. Detailní fyzická množství mohou být doplněna později tam, kde je potřebuje logistika, inventář nebo konkrétní transakce.
+
+### Budoucí důsledek
+
+Ztráta části hinterlandu musí být schopná snížit:
+
+- dostupnou pracovní sílu;
+- zemědělskou produkci;
+- těžbu;
+- zásobování města;
+
+a tím vytvořit skutečný ekonomický a politický tlak.
