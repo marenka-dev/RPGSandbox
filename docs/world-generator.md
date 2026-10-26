@@ -480,3 +480,30 @@ player knowledge
 ≠
 current perception
 ```
+
+
+## Ekonomická konzistence
+
+Od v0.4.1 se produkce nesmí generovat nezávisle na ekonomických entitách.
+
+Správná kauzalita je:
+
+```text
+populace
+→ pracovní síla
+→ pracovní struktura
+→ výrobní jednotky
+→ jejich kapacita a výstupy
+→ produkce sídla
+→ spotřeba
+→ přebytek / deficit
+```
+
+Výrobní jednotka může být rodinná, podniková, velkoprodukční nebo institucionální.
+
+To zabraňuje dvěma chybám:
+
+1. vysoký počet pracovníků už automaticky nevytváří desítky identických podniků;
+2. zničení nebo změna výrobní jednotky se musí promítnout do skutečné ekonomické bilance.
+
+Trade & Market má být postaven až nad tímto konzistentním základem.
