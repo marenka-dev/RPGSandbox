@@ -599,7 +599,8 @@ internal static class WorldGenerator
         Random rng,
         List<Settlement> settlements,
         List<Household> households,
-        Dictionary<string, List<JobDemand>> jobDemand)
+        Dictionary<string, List<JobDemand>> jobDemand,
+        List<ResourceCapacity> capacities)
     {
         var result = new List<ProductionUnit>();
         var id = 1;
