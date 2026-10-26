@@ -116,3 +116,40 @@ Důležitý princip je oddělení detailu:
 - detailní Character profil se vytváří pouze pro herně významné osoby, ale navazuje na již existující populaci.
 
 Další vrstva má využít lokální přebytky a deficity pro fyzický obchod mezi sídly po existující cestní síti.
+
+
+## 11. Economic Consistency – výrobní jednotky jako zdroj pravdy
+
+Od worldgenu v0.4.1 je produkce sídla odvozena pouze z explicitních výrobních jednotek.
+
+```text
+labor
+→ ProductionUnit
+→ outputs
+→ aggregate production
+→ demand
+→ balance
+```
+
+Tím se odstraňuje paralelní stav, kdy podniky existovaly pouze jako prezentace, zatímco produkce se počítala nezávisle.
+
+### Typy výrobních jednotek
+
+- **household:** rodinné hospodářství a domácí výroba;
+- **business:** samostatný podnik viditelný jako ekonomická entita;
+- **estate:** větší producent s vyšší koncentrací pracovníků;
+- **institution:** nekomerční organizační kapacita.
+
+Ne každá ekonomická činnost musí být samostatným podnikem.
+
+### Invariant
+
+```text
+SettlementEconomy.Production
+=
+Σ ProductionUnit.Outputs
+```
+
+Tento invariant musí kontrolovat automatický validator.
+
+Budoucí simulace změny pracovní síly, požáru, bankrotu, války nebo nedostatku vstupů má měnit konkrétní ProductionUnit, ze které se následně přepočítá stav sídla.
