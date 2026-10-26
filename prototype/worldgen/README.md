@@ -205,3 +205,68 @@ Porovnej hlavně, zda:
 Před Trade & Market vložíme ještě mezikrok **v0.4.1 – Economic Consistency**: práce → výrobní jednotky → kapacita → skutečná produkce musí být jedna kauzální větev, ne paralelní výpočty.
 
 Současně je schválen další prostorový princip pro pozdější Settlement Spatial Model: regionální buňka s městem není jedna obří scéna. Vstup do sídla vede přes konkrétní entry point do hierarchie čtvrtí, ulic, budov a lokálních scén. Kontextové akce se vždy odvozují jen z aktuální scény, nikoli ze všech obyvatel a podniků sídla.
+
+
+## v0.4.1 – Economic Consistency
+
+v0.4.1 sjednocuje pracovní sílu, výrobní jednotky a produkci do jedné kauzální větve.
+
+```text
+population
+→ households
+→ labor structure
+→ production units
+→ output
+→ settlement demand
+→ balance
+```
+
+Produkce už nevzniká samostatným výpočtem podle toho, že sídlo „má obilí“. Každá jednotka produkce musí pocházet z konkrétní výrobní jednotky.
+
+### ProductionUnit
+
+Výrobní jednotka má:
+
+- sídlo;
+- typ;
+- měřítko;
+- počet pracovníků;
+- volitelnou vazbu na domácnost;
+- konkrétní výstupy.
+
+Měřítka:
+
+- `household` – rodinné hospodářství, domácí řemeslo, drobná služba;
+- `business` – hostinec, dílna, obchod, dřevorubecký provoz;
+- `estate` – větší statek, důl nebo jiný větší producent;
+- `institution` – správní kapacita.
+
+### Důležitý rozdíl
+
+271 zemědělců už neznamená automaticky 34 identických firem.
+
+Část práce se rozdělí mezi rodinná hospodářství a menší počet větších statků.
+
+Podobně služby a obchod mají omezený počet viditelných podniků; zbytek může zůstat jako agregovaná domácí/lokální ekonomická aktivita.
+
+### Produkce je odvozena z jednotek
+
+Pro sídlo platí:
+
+```text
+settlement production
+=
+sum(outputs of all production units)
+```
+
+Validátor kontroluje, že čísla v ekonomice přesně odpovídají výrobním jednotkám.
+
+Pokud se později výrobní jednotka zničí, zavře nebo přijde o pracovníky, musí se změnit i produkce sídla.
+
+### Oblečení
+
+v0.4.1 přidává první jednoduchou textilní výrobu. Sídla s pastvinami mají lepší produktivitu, ostatní mohou mít pouze omezenou domácí textilní výrobu. Deficit oblečení tak už není nutně absolutní, ale může přirozeně zůstat importní potřebou.
+
+### Další krok
+
+Až tento model projde testem, dává smysl přejít na **Trade & Market**: přebytky a deficity mezi sídly, přeprava přes existující cesty a následně ceny.
