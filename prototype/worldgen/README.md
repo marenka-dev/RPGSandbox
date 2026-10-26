@@ -1,103 +1,163 @@
-# World Generator v0.3 – Spatial Region
+# World Generator v0.4 – Population & Economy
 
-v0.3 přidává skutečnou prostorovou vrstvu regionu. Region už není jen seznam vlastností; skládá se z konkrétních buněk mapy se souřadnicemi a lokálními vlastnostmi.
+v0.4 navazuje na prostorový region z v0.3 a přidává první skutečnou populační a ekonomickou vrstvu.
 
-## Co je nové
+## Hlavní změna
 
-### Prostorová mapa regionu
+Populace hlavních sídel už není jen číslo ani několik reprezentativních NPC.
 
-Každý region má mřížku buněk. Každá buňka má vlastní:
-
-- souřadnice X/Y;
-- nadmořský charakter;
-- vlhkost;
-- teplotu;
-- úrodnost;
-- lesnatost;
-- informaci o řece;
-- typ terénu;
-- lokální zdroje.
-
-Řeka už není pouze regionální vlastnost. Prochází konkrétními buňkami mapy.
-
-### Sídla mají konkrétní polohu
-
-Sídlo vzniká jen na vhodné buňce a dostává souřadnice.
-
-Výběr místa bere v úvahu například:
-
-- úrodnost;
-- vodu;
-- reliéf;
-- lokální zdroje;
-- regionální obchodní průchodnost.
-
-Sídla jsou od sebe prostorově oddělená a následně propojena cestami.
-
-### Lokální zdroje místo globálních
-
-Ekonomická specializace sídla se už neodvozuje z celého regionu.
-
-Sídlo čerpá pouze zdroje dostupné ve svém okolí.
-
-Příklad:
+Každý obyvatel hlavního sídla nyní patří do persistentní domácnosti a zároveň existuje jako lehká persistentní osoba.
 
 ```text
-vesnice u řeky + obilná půda
-→ obilí + voda
-→ mlýn + zemědělství
-
-osada u lesa
-→ dřevo
-→ dřevorubectví + tesařství
-
-sídlo u rudonosné vrchoviny
-→ železná ruda
-→ kovárna
+region
+↓
+settlement
+↓
+households
+↓
+people
+↓
+working population
+↓
+job demand
+↓
+businesses
+↓
+production / consumption
+↓
+economic balance
 ```
 
-### Cesty
+## Domácnosti
 
-Worldgen vytvoří základní síť cest mezi sídly. Každá cesta má:
+Každé sídlo je rozděleno na domácnosti.
 
-- počáteční sídlo;
-- cílové sídlo;
-- délku v buňkách;
-- konkrétní trasu přes mapu.
+Domácnost obsahuje například:
 
-v0.3 zatím používá jednoduchou přímou trasu. Později se cesta bude vyhýbat nevhodnému terénu a využívat brody, průsmyky a další přirozené koridory.
+- stabilní ID;
+- sídlo;
+- počet členů;
+- sociální vrstvu;
+- hlavní zdroj obživy;
+- majetkovou úroveň;
+- vazbu na své členy.
 
-### Populace je explicitně rozdělená
+Součet členů domácností musí přesně odpovídat populaci sídla.
 
-Regionální populace už není nevysvětlený rozdíl mezi součtem sídel a celkem.
+## Lehká populace
 
-Je rozdělena na:
+Pro každého obyvatele hlavního sídla vzniká lehká persistentní osoba:
+
+- stabilní ID;
+- jméno;
+- věk;
+- domácnost;
+- sídlo.
+
+To není kompletní Character profil. Hlubší osobnost, cíle, paměť a vztahy se mohou doplnit až tehdy, když se osoba stane důležitou.
+
+Důležité je, že postava **už existuje před setkáním s hráčem**.
+
+## Ekonomické potřeby sídla
+
+Každé sídlo má agregované potřeby:
+
+- food;
+- fuel;
+- clothing;
+- tools.
+
+Množství vychází z počtu obyvatel.
+
+## Produkce
+
+Produkce se odvozuje od lokálních zdrojů.
+
+Například:
 
 ```text
-hlavní sídla
-rozptýlené venkovské domácnosti
-malé osady
-samoty a izolovaná místa
+obilí
+→ produkce food
+
+ryby
+→ další food
+
+dřevo
+→ fuel + část tools
+
+železná ruda
+→ tools
 ```
 
-Tím má engine explicitní zdroj budoucích domácností, pracovní síly a drobných lokalit.
+v0.4 je stále zjednodušený model. Produkce zatím nepracuje s úplnými výrobními recepturami a zásobami.
 
-### Oddělené RNG streamy
+## Bilance
 
-Jednotlivé části worldgenu mají vlastní deterministický random stream:
+Pro každou potřebu se počítá:
 
 ```text
-root seed
-├─ geography
-├─ settlements
-├─ economy
-├─ population
-├─ politics
-├─ history
-└─ scene
+balance = local production - local demand
 ```
 
-Změna politické stability proto nemá měnit geografii, názvy sídel nebo tok řeky.
+Výsledek může být:
+
+- kladný – přebytek;
+- nulový – přibližná soběstačnost;
+- záporný – deficit.
+
+To je budoucí základ pro obchod mezi sídly.
+
+## Pracovní trh
+
+Z populace se odvodí přibližná pracovní síla a následně poptávka po profesích.
+
+Příklady:
+
+- zemědělec;
+- dřevorubec;
+- horník;
+- rybář;
+- řemeslník;
+- služby;
+- obchodník;
+- správa.
+
+Podniky vznikají podle pracovní poptávky a lokálních zdrojů, ne přímo podle jednoduchého `population / číslo`.
+
+## Podniky
+
+Podnik v0.4 obsahuje:
+
+- typ;
+- sídlo;
+- vlastníka;
+- několik reprezentativních pracovníků;
+- výstupy;
+- požadovaný počet pracovníků;
+- produkční kapacitu.
+
+Počet pracovníků je zatím agregovaný. Není nutné ukládat tisíce pracovních vazeb jednotlivě, dokud nejsou herně relevantní.
+
+## Významné NPC
+
+Z nejvýznamnějších nebo nejbohatších domácností vznikne menší sada detailnějších Character entit.
+
+Character tedy není náhrada populace.
+
+Je to detailnější vrstva nad již existujícím člověkem/domácností.
+
+## Validace
+
+Worldgen kontroluje mimo jiné:
+
+- součet populace regionu;
+- součet populace hlavních sídel;
+- součet členů domácností v každém sídle;
+- počet lehkých osob proti populaci sídla;
+- existenci ekonomiky pro každé sídlo;
+- reference domácností;
+- reference podniků a vlastníků;
+- matematickou správnost ekonomické bilance.
 
 ## Spuštění
 
@@ -109,36 +169,37 @@ dotnet run -- --seed 222
 dotnet run -- --seed 333
 ```
 
-Důležitý regresní test:
+## Co sledovat
 
-```powershell
-dotnet run -- --seed 111
-dotnet run -- --seed 111 --politics low
+Ve výstupu se nově objeví například:
+
+```text
+SÍDLA A EKONOMIKA:
+- ...
+    domácnosti: ...
+    obyvatel v domácnostech: ...
+    potřeby: food:..., fuel:...
+    produkce: food:..., fuel:...
+    bilance: food:+..., tools:-...
+    pracovní poptávka: zemědělec:..., řemeslník:...
 ```
 
-Geografie, souřadnice sídel a základní mapa mají zůstat stejné. Změnit se má politická vrstva a případně historie, která na ní závisí.
+Porovnej hlavně, zda:
 
-Klimatický bias naopak geografii měnit smí:
+1. domácnosti přesně pokrývají populaci sídla;
+2. sídla s odlišnými zdroji mají odlišnou pracovní strukturu;
+3. deficit a přebytek dávají intuitivní smysl;
+4. počet podniků odpovídá pracovní poptávce;
+5. různé seedy vytvářejí odlišnou ekonomickou strukturu.
 
-```powershell
-dotnet run -- --seed 111 --climate dry
-dotnet run -- --seed 111 --climate wet
-dotnet run -- --seed 111 --climate mountain
-```
+## Co v0.4 ještě není
 
-## Co sledovat ve výstupu
+- žádné skutečné zásoby;
+- žádné ceny;
+- žádné peněžní toky;
+- žádný obchod mezi sídly;
+- žádné mzdy;
+- žádná detailní zaměstnání všech jednotlivců;
+- žádná historická změna ekonomiky.
 
-- rozměr mapy;
-- počet říčních buněk;
-- souřadnice sídel;
-- lokální zdroje jednotlivých sídel;
-- rozdílné ekonomické specializace v rámci stejného regionu;
-- cestní síť;
-- explicitní rozdělení regionální populace;
-- startovní souřadnici a její skutečné lokální vlastnosti.
-
-## Co v0.3 ještě není
-
-Mapa je stále abstraktní mřížka, ne finální herní mapa. Řeka je jednoduchý procedurální pás a cesty jsou vedené přímou trasou. Historie stále ještě plně nepřepisuje současný stav světa.
-
-Další hlavní krok bude **Population & Economy v0.4**: domácnosti, pracovní místa, poptávka po profesích, produkce a spotřeba navázaná na konkrétní sídla a jejich lokální zdroje.
+Další logický krok bude **v0.5 – Trade & Market**: přebytky jednoho sídla budou moci pokrývat deficit jiného sídla pouze přes existující cestní síť a za dopravní náklady.
