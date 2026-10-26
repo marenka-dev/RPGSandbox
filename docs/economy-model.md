@@ -87,3 +87,32 @@ Jsou to koncepty, nikoli závazné databázové tabulky. Detailní struktura, za
 Ověření na Rabenfeldu: zemědělci → mlýn → pekárna → místní spotřeba a obchod. Simulovat nedostatek obilí, reakci cen a zásob, možnost dovozu, zásah cechu a individuální rozhodování několika NPC. Kontrolovat konzistenci převodu zásob, peněz, příčiny změn a návaznost na Event Engine.
 
 Viz také [návrh struktury ekonomického modulu](economy-code-structure.md).
+
+
+## 10. Worldgen v0.4 – populační a produkční základ
+
+První implementovaný prototyp ekonomiky vzniká již při generování světa.
+
+V hlavních sídlech používá tuto kauzalitu:
+
+```text
+population
+→ households
+→ persistent lightweight people
+→ aggregate demand
+→ labor demand
+→ businesses
+→ production capacity
+→ local balance
+```
+
+Tento model zatím neřeší ceny ani peníze. Jeho úkolem je nejprve ověřit, že množství lidí, práce, podniků, produkce a spotřeby vzniká ze společného konzistentního základu.
+
+Důležitý princip je oddělení detailu:
+
+- každý obyvatel hlavního sídla může existovat jako lehká persistentní osoba;
+- domácnosti jsou persistentní ekonomické jednotky;
+- pracovní síla a část zaměstnanosti může být agregovaná;
+- detailní Character profil se vytváří pouze pro herně významné osoby, ale navazuje na již existující populaci.
+
+Další vrstva má využít lokální přebytky a deficity pro fyzický obchod mezi sídly po existující cestní síti.
