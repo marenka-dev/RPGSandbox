@@ -188,4 +188,35 @@ První implementace je v:
 
 `prototype/worldgen`
 
-World Generator v0.1 zatím používá jednoduché deterministické šablony. Úkolem je ověřit datovou pipeline, konzistenci, úroveň detailu a vznik startovní scény předtím, než začneme řešit realistickou proceduralitu a simulaci historie.
+World Generator v0.1 ověřil datovou pipeline, konzistenci a vznik startovní scény. v0.2 začíná proceduralizovat samotný region: seed ovlivňuje klima, reliéf, úrodnost, lesnatost, vodu, zdroje, populaci, sídla a z nich odvozenou základní ekonomiku.
+
+### Vztah WorldConfig, seedu a pravidel
+
+Základní rovnice worldgenu:
+
+```text
+WORLD =
+WorldConfig
++ Seed
++ generační pravidla
++ historická simulace
+```
+
+**WorldConfig** vymezuje prostor možných světů. Určuje například éru, technologický strop, fantasy pravidla, klimatický bias, politickou stabilitu a ekonomickou komplexitu.
+
+**Seed** neurčuje pravidla reality. Vybírá konkrétní variantu uvnitř těchto pravidel.
+
+**Generační pravidla** převádějí fyzické podmínky na důsledky:
+
+```text
+klima + reliéf
+→ úrodnost + voda + lesnatost
+→ zdroje
+→ nosná kapacita
+→ populace
+→ sídla
+→ ekonomické potřeby
+→ profese a podniky
+```
+
+Tím se chceme vyhnout nezávislému náhodnému generování prvků, které by spolu nedávaly smysl.
