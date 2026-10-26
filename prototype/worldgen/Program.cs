@@ -188,7 +188,9 @@ internal static class WorldGenerator
         [
             new("family.matej", "Rodina Matěje", "settlement.rabenfeld", "common", ["person.matej", "person.anna"]),
             new("family.havel", "Rodina Havla", "settlement.rabenfeld", "merchant", ["person.havel", "person.katerina"]),
-            new("family.raben", "Rod Rabenů", "settlement.rabenfeld", "noble", ["person.heinrich", "person.eliska"])
+            new("family.raben", "Rod Rabenů", "settlement.rabenfeld", "noble", ["person.heinrich", "person.eliska"]),
+            new("family.ondrej", "Rodina Ondřeje", "settlement.rabenfeld", "common", ["person.ondrej"]),
+            new("family.miller", "Rodina mlynáře", "settlement.linden", "common", ["person.miller"])
         ];
     }
 
@@ -213,7 +215,9 @@ internal static class WorldGenerator
             new("person.eliska", "Eliška z Rabenfeldu", 21, "šlechtična", "family.raben", "settlement.rabenfeld",
                 ["faction.house.raben"], 66, ["zvídavá", "sebevědomá"]),
             new("person.ondrej", "Ondřej", 34, "koželuh", "family.ondrej", "settlement.rabenfeld",
-                [], 29, ["pracovitý", "nedůvěřivý"])
+                [], 29, ["pracovitý", "nedůvěřivý"]),
+            new("person.miller", "Václav", 45, "mlynář", "family.miller", "settlement.linden",
+                [], 51, ["praktický", "usedlý"])
         ];
     }
 
@@ -288,35 +292,49 @@ internal static class WorldGenerator
         List<Settlement> settlements,
         List<Character> characters)
     {
-        // v0.1 intentionally starts outside the town to prove that local scene
-        // detail can be derived from an already generated region.
+        // v0.1 chooses a generated region first and derives the local scene from it.
+        var region = regions.First(x => x.Id == "region.northwoods");
+        var linkedSettlements = settlements
+            .Where(x => x.RegionId == region.Id || x.Connections.Contains("road.rabenfeld-northwoods"))
+            .Select(x => x.Name)
+            .Distinct()
+            .ToList();
+
+        var visible = new List<string>
+        {
+            region.Terrain.FirstOrDefault() ?? "les",
+            "úzká lesní cesta",
+            "padlý kmen",
+            "mělké stopy v blátě"
+        };
+
+        if (region.Resources.Contains("dřevo"))
+            visible.Add("stopy po těžbě dřeva v širším okolí");
+
+        var destinations = linkedSettlements
+            .Select(name => $"{name} – po lesní cestě")
+            .ToList();
+        destinations.Add("potok – přibližně 200 metrů na jih");
+
+        var actions = new List<string>
+        {
+            "Rozhlédnout se po mýtině",
+            "Prohlédnout stopy v blátě",
+            "Prohlédnout padlý kmen",
+            "Jít k potoku"
+        };
+        actions.AddRange(linkedSettlements.Select(name => $"Vydat se po cestě směrem na {name}"));
+
         return new(
             "scene.start.forest",
-            "lesní mýtina severně od Rabenfeldu",
+            "lesní mýtina v Severních hvozdech",
             "forest_cell",
-            "Rabenfeldsko",
-            "chladné jasné ráno",
-            [
-                "smíšený les",
-                "úzká lesní cesta",
-                "padlý kmen",
-                "mělké stopy v blátě",
-                "potok slyšitelný z jihu"
-            ],
-            [
-                "Rabenfeld – cesta na jihovýchod",
-                "Hvozdec – cesta na sever",
-                "potok – přibližně 200 metrů na jih"
-            ],
+            region.Name,
+            region.Climate.Contains("chlad") ? "chladné jasné ráno" : "jasné ráno",
+            visible,
+            destinations,
             [],
-            [
-                "Rozhlédnout se po mýtině",
-                "Prohlédnout stopy v blátě",
-                "Jít k potoku",
-                "Vydat se po cestě k Rabenfeldu",
-                "Vydat se po cestě k Hvozdci",
-                "Prohlédnout padlý kmen"
-            ]);
+            actions);
     }
 }
 
